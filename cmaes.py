@@ -7,6 +7,7 @@ from collections import deque
 CRITERIA = [lambda x: np.dot(x,x), lambda x: np.dot(x-2, x+3)]
 ######################
 
+_MAXIMISE = False
 _EPS = 1e-50
 _POINT_MAX = 1e100
 _SIGMA_MAX = 1e100
@@ -46,7 +47,8 @@ class CMAES:
         self._budget = 1000
 
         # Initial point
-        self._xmean = 80 * np.random.uniform(size = self._N)
+        self._old_mean = None
+        self._new_mean = None
         # Step size
         self._sigma = 1
 
@@ -89,17 +91,73 @@ class CMAES:
             self._new_generation()
 
     def _update(self) -> None:
-        assert len(self._populations[0]) == self._lambda, "Must evaluate solutions with length equal to population size."
-        for point_value in self._populations[0]:
+        assert len(self._populations) <= self._H, f"There should be no more than H populations saved in history"
+        assert len(self._populations[0]) == self._mu, f"There should be exactly mu points in each saved population"
+        assert len(self._populations[0][0]) == self._N, f"Each point should have exatcly N dimensions"
+        for point in self._populations[0]:
             assert np.all(
-                np.abs(point_value[0]) < _POINT_MAX
+                np.abs(point) < _POINT_MAX
             ), f"Absolute value of all generated points must be less than {_POINT_MAX} to avoid overflow errors."
 
+        #### UPDATE TODO
         self._generation += 1
 
-        #### NSGA - SORTING
 
-        #### UPDATE
+    
+    def _get_diffs(self) -> List[np.array]:
+        diffs = []
+        for _ in range(self._lambda):
+            history_index = np.random.randint(0, min(len(self._populations), self._H))
+            x1_index = np.random.randint(0, self._lambda)
+            x2_index = np.random.randint(0, self._lambda)
+
+            diff = self._populations[history_index][x1_index][0] - self._populations[history_index][x2_index][0]
+            diffs.append(diff)
+
+        return diffs
+    
+    def _init_first_population(self, loc: np.array = 0, scale: float = 1) -> None:
+        self._last_population = []
+        for _ in range(self._lambda):
+            new = np.random.normal(loc = loc, scale = scale, size = self._N)
+            value = self._evaluate(new)
+            self._last_population.append((new, value))
+        selected = np.array([x[0] for x in sorted(self._last_population, key=lambda x: x[1], reverse=_MAXIMISE)][:self._mu]) ###fix sorting
+        self._old_mean = self._new_mean
+        self._new_mean = np.mean(selected, axis=0)
+
+        self._populations.append(selected)
+
+    def _new_generation(self) -> None:
+        self._last_population = []
+        for _ in range(self._lambda):
+            new = self._sample_solution()
+            value = self._evaluate(new)
+            self._last_population.append((new, value))
+
+        selected = np.array([x[0] for x in sorted(self._last_population, key=lambda x: x[1], reverse=_MAXIMISE)][:self._mu])
+
+        self._old_mean = self._new_mean
+        self._new_mean = np.mean(selected, axis=0)
+
+        self._populations.appendleft(selected)
+        if len(self._populations) > self._H:
+            self._populations.pop()
+
+    def _sample_solution(self) -> np.ndarray:
+        return self._new_mean.copy() + np.random.standard_normal(self._N)
+
+    def mean_history(self) -> List[float]:
+        return self._mean_history
+
+    def _evaluate(self, x):
+        if self._count_eval < self._budget:
+            return CRITERIA[0](x)
+        return self._worst_fitness
+        # if self._count_eval < self._budget:
+        #     self._count_eval += 1
+        #     return np.array([f(x) for f in CRITERIA])
+        # return np.array([self._worst_fitness for _ in CRITERIA])
 
     def _draw(self):
         title = "Iteracja " + str(self._generation) + ", \n"
@@ -116,68 +174,22 @@ class CMAES:
 
         plt.axvline(0, linewidth=4, c='black')
         plt.axhline(0, linewidth=4, c='black')
-        x1 = [point[0][-1] for point in self._populations[0]]
-        x2 = [point[0][-2] for point in self._populations[0]]
+        x1 = [point[0][-1] for point in self._last_population]
+        x2 = [point[0][-2] for point in self._last_population]
         plt.scatter(x1, x2, s=50)
         # x1 = [point[-1] for point in self._populations[0][:self._mu]]
         # x2 = [point[-2] for point in self._populations[0][:self._mu]]
         # plt.scatter(x1, x2, s=15)
-        plt.scatter(self._xmean[-1], self._xmean[-2], s=100, c='black')
+        plt.scatter(self._new_mean[-1], self._new_mean[-2], s=100, c='black')
         plt.grid()
         zoom_out = 1.3
-        max1 = zoom_out*max([abs(point[0][-1]) for point in self._populations[0]])
-        max2 = zoom_out*max([abs(point[0][-2]) for point in self._populations[0]])
+        max1 = zoom_out*max([abs(point[0][-1]) for point in self._last_population])
+        max2 = zoom_out*max([abs(point[0][-2]) for point in self._last_population])
         plt.xlim(-max1, max1)
         plt.ylim(-max2, max2)
         plt.pause(_DELAY)
         plt.clf()
         plt.cla()
-    
-    def _get_diffs(self) -> List[np.array]:
-        diffs = []
-        for _ in range(self._lambda):
-            history_index = np.random.randint(0, min(len(self._populations), self._H))
-            x1_index = np.random.randint(0, self._lambda)
-            x2_index = np.random.randint(0, self._lambda)
-
-            diff = self._populations[history_index][x1_index][0] - self._populations[history_index][x2_index][0]
-            diffs.append(diff)
-
-        return diffs
-    
-    def _init_first_population(self, loc: np.array = 0, scale: float = 1) -> None:
-        new_population = []
-        for _ in range(self._lambda):
-            new = np.random.normal(loc = loc, scale = scale, size = self._N)
-            value = self._evaluate(new)
-            new_population.append((new, value))
-        self._xmean = np.mean(np.array([x[0] for x in new_population]), axis=0)
-        self._populations.append(new_population)
-
-    def _new_generation(self) -> None:
-        new_population = []
-        for _ in range(self._lambda):
-            new = self._sample_solution()
-            value = self._evaluate(new)
-            new_population.append((new, value))
-        self._xmean = np.mean(np.array([x[0] for x in new_population]), axis=0)
-
-        self._populations.appendleft(new_population)
-        if len(self._populations) > self._H:
-            self._populations.pop()
-
-    def _sample_solution(self) -> np.ndarray:
-        return self._xmean.copy()
-
-    def mean_history(self) -> List[float]:
-        return self._mean_history
-
-    def _evaluate(self, x):
-        if self._count_eval < self._budget:
-            self._count_eval += 1
-            return np.array([f(x) for f in CRITERIA])
-        return np.array([self._worst_fitness for _ in CRITERIA])
-
 
 if __name__ == "__main__":
     X, Y = CMAES(None, 2, 2, None, None).init_first_population(0,1)
