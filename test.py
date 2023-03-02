@@ -1,29 +1,19 @@
 import numpy as np
-import time
-from collections import deque
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
 
-n = 1000000
+fig, ax = plt.subplots()
+
+def f(_):
+    lbd = 10
+    x = np.random.normal(size=lbd)
+    y = np.random.normal(size=lbd)
+    ax.cla()
+    plt.grid(zorder=1)
+    plt.scatter(x,y, zorder=5, c='red', s=50)
+    plt.vlines(0, -6, 6, linewidth = 10, colors='black', zorder = 2)
+    plt.hlines(0, -6, 6, linewidth = 10, colors='black', zorder = 2)
 
 
-startx = time.perf_counter()
-arr = [5]*30
-l = len(arr)
-head = 0
-for _ in range(n):
-    arr[head] = np.random.normal()
-    head = (head + 1) % l
-stopx = time.perf_counter()
-
-
-starty = time.perf_counter()
-arr = deque([5]*30)
-for _ in range(n):
-    arr.append(np.random.normal())
-    arr.popleft()
-stopy = time.perf_counter()
-
-print(10**6*(stopx-startx))
-print()
-
-print(10**6*(stopy-starty))
-print()
+ani = animation.FuncAnimation(fig, f, interval= 0)
+plt.show()

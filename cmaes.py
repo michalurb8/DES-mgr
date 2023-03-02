@@ -1,7 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.animation
 from typing import List, Tuple
 from collections import deque
+import signal
 
 ######################
 CRITERIA = [lambda x: np.dot(x,x), lambda x: np.dot(x-2, x+3)]
@@ -10,12 +12,19 @@ CRITERIA = [lambda x: np.dot(x,x), lambda x: np.dot(x-2, x+3)]
 _MAXIMISE = False
 _EPS = 1e-50
 _POINT_MAX = 1e100
-_SIGMA_MAX = 1e100
 
 _DELAY = 0.2
 
 infp = float('inf')
 infn = float('-inf')
+
+class Killer:
+    kill_now = False
+    def __init__(self):
+        signal.signal(signal.SIGINT, lambda _, __: self.exitt())
+        signal.signal(signal.SIGTERM, lambda _, __: self.exitt())
+    def exitt(self):
+        self.kill_now = True
 
 class CMAES:
     """
@@ -37,7 +46,7 @@ class CMAES:
         self._N = dimensions
         self._M = objective_count
         self._stop_after = stop_after
-        self._visuals = visuals
+        self._visuals = visuals and self._N >= 2
 
         self._F = 1/np.sqrt(2)
         self._C = 4/(self._N + 4)
@@ -79,13 +88,20 @@ class CMAES:
         self._populations = deque([])
 
         # Run the algorithm
+        self._killer = Killer()
+        self._visuals_started = False
         self._generation_loop()
 
     def _generation_loop(self):
         assert self._results == [], "One algorithm instance can only run once."
         self._init_first_population()
         for _ in range(self._stop_after):
-            if self._visuals == True and self._N >= 2:
+            if self._killer.kill_now:
+                exit()
+            if self._visuals:
+                if not self._visuals_started:
+                    self._visuals_started = True
+                    plt.subplots(1, 2)
                 self._draw()
             self._update()
             self._new_generation()
@@ -122,8 +138,8 @@ class CMAES:
             new = np.random.normal(loc = loc, scale = scale, size = self._N)
             value = self._evaluate(new)
             self._last_population.append((new, value))
-        selected = np.array([x[0] for x in sorted(self._last_population, key=lambda x: x[1], reverse=_MAXIMISE)][:self._mu]) ###fix sorting
-        self._old_mean = self._new_mean
+        selected = np.array([x[0] for x in sorted(self._last_population, key=lambda x: x[1], reverse=_MAXIMISE)][:self._mu]) ### implements NSGA sorting
+        self._old_mean = np.mean([x[0] for x in self._last_population], axis=0)
         self._new_mean = np.mean(selected, axis=0)
 
         self._populations.append(selected)
@@ -159,7 +175,9 @@ class CMAES:
         #     return np.array([f(x) for f in CRITERIA])
         # return np.array([self._worst_fitness for _ in CRITERIA])
 
-    def _draw(self):
+    def _draw(self, _ = None):
+        plt.cla()
+        plt.clf()
         title = "Iteracja " + str(self._generation) + ", \n"
         title += "Liczebność populacji: " + str(self._lambda) + ", \n"
         title += "Wymiarowość: " + str(self._N) + ", \n"
@@ -170,17 +188,18 @@ class CMAES:
         plt.subplots_adjust(top = 0.8, bottom = 0.1, left = 0.1, right = 0.99)
         plt.title(title)
 
-        # plt.axis('equal')
+        plt.axis('equal')
 
         plt.axvline(0, linewidth=4, c='black')
         plt.axhline(0, linewidth=4, c='black')
         x1 = [point[0][-1] for point in self._last_population]
         x2 = [point[0][-2] for point in self._last_population]
         plt.scatter(x1, x2, s=50)
-        # x1 = [point[-1] for point in self._populations[0][:self._mu]]
-        # x2 = [point[-2] for point in self._populations[0][:self._mu]]
-        # plt.scatter(x1, x2, s=15)
+        x1 = [point[-1] for point in self._populations[0]]
+        x2 = [point[-2] for point in self._populations[0]]
+        plt.scatter(x1, x2, s=15)
         plt.scatter(self._new_mean[-1], self._new_mean[-2], s=100, c='black')
+        plt.scatter(self._old_mean[-1], self._old_mean[-2], s=100, c='green')
         plt.grid()
         zoom_out = 1.3
         max1 = zoom_out*max([abs(point[0][-1]) for point in self._last_population])
@@ -188,10 +207,6 @@ class CMAES:
         plt.xlim(-max1, max1)
         plt.ylim(-max2, max2)
         plt.pause(_DELAY)
-        plt.clf()
-        plt.cla()
 
 if __name__ == "__main__":
-    X, Y = CMAES(None, 2, 2, None, None).init_first_population(0,1)
-    plt.scatter(X,Y)
-    plt.show()
+    CMAES(None, 2, 2, None, None)
