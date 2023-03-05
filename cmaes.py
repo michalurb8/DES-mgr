@@ -52,7 +52,7 @@ class CMAES:
         self._H = 6 + 3*np.sqrt(self._N)
 
         self._count_eval = 0
-        self._budget = 10000
+        self._budget = infp
 
         # Initial point
         self._mean_m = None
@@ -69,7 +69,7 @@ class CMAES:
         self._mu = self._lambda // 2
 
         # E||N(0, I)||
-        self._chi = np.sqrt(self._N) #* (1 - 1 / (4 * self._N) + 1 / (21 * self._N ** 2))
+        self._chi = np.sqrt(self._N) * (1 - 1 / (4 * self._N) + 1 / (21 * self._N ** 2))
 
         # noise intensity
         self._EPS = 10 ** (-8)/ self._chi
@@ -192,27 +192,37 @@ class CMAES:
 
     def _draw_features(self, _ = None):
         self._ax1.clear()
-        self._ax1.grid()
+        self._ax1.grid(zorder = 1)
 
-        # self._ax1.axis('equal')
+        axis_equal = False
 
-        self._ax1.axvline(0, linewidth=4, c='black')
-        self._ax1.axhline(0, linewidth=4, c='black')
+        self._ax1.axvline(0, linewidth=4, c='black', zorder = 2)
+        self._ax1.axhline(0, linewidth=4, c='black', zorder = 2)
         x1 = [point[0][-1] for point in self._last_population]
         x2 = [point[0][-2] for point in self._last_population]
-        self._ax1.scatter(x1, x2, s=50)
+        self._ax1.scatter(x1, x2, s=50, zorder = 3)
         x1 = [point[-1] for point in self._populations[0]]
         x2 = [point[-2] for point in self._populations[0]]
-        self._ax1.scatter(x1, x2, s=15)
+        self._ax1.scatter(x1, x2, s=15, zorder = 3)
         # self._ax1.scatter(self._mean_m[-1], self._mean_m[-2], s=100, c='black')
         # self._ax1.scatter(self._mean_s[-1], self._mean_s[-2], s=100, c='green')
-        zoom_out = 1.2
-        max1 = zoom_out*max([abs(point[0][-1]) for point in self._last_population])
-        max2 = zoom_out*max([abs(point[0][-2]) for point in self._last_population])
-        maxx = max(max1, max2)
-        maxx = 2*np.exp(np.ceil(np.log(maxx)/2)*2)
-        self._ax1.set_xlim(-maxx, maxx)
-        self._ax1.set_ylim(-maxx, maxx)
+        treshold = 2
+
+        if axis_equal:
+            max1 = max([abs(point[0][-1]) for point in self._last_population])
+            max1 = np.exp(np.ceil(np.log(max1)/treshold)*treshold)
+            max2 = max([abs(point[0][-2]) for point in self._last_population])
+            max2 = np.exp(np.ceil(np.log(max2)/treshold)*treshold)
+            self._ax1.axis('equal')
+            max1 = max2 = max(max1,max2)
+        else:
+            max1 = 1.2*max([abs(point[0][-1]) for point in self._last_population])
+            max2 = 1.2*max([abs(point[0][-2]) for point in self._last_population])
+            self._ax1.axis('auto')
+
+
+        self._ax1.set_xlim(-max1, max1)
+        self._ax1.set_ylim(-max2, max2)
 
     def _draw_values(self, _ = None):
         self._ax2.clear()
