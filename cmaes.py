@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from typing import List, Tuple
 from collections import deque
 import signal
-import time
+import functions
 
 ######################
 CRITERIA = [lambda x: np.dot(x,x)] #, lambda x: np.dot(x-2, x+3)]
@@ -52,7 +52,7 @@ class CMAES:
         self._H = 6 + 3*np.sqrt(self._N)
 
         self._count_eval = 0
-        self._budget = 1000
+        self._budget = 10000
 
         # Initial point
         self._mean_m = None
@@ -69,7 +69,7 @@ class CMAES:
         self._mu = self._lambda // 2
 
         # E||N(0, I)||
-        self._chi = np.sqrt(self._N) * (1 - 1 / (4 * self._N) + 1 / (21 * self._N ** 2))
+        self._chi = np.sqrt(self._N) #* (1 - 1 / (4 * self._N) + 1 / (21 * self._N ** 2))
 
         # noise intensity
         self._EPS = 10 ** (-8)/ self._chi
@@ -95,7 +95,7 @@ class CMAES:
 
     def _generation_loop(self):
         assert self._results == [], "One algorithm instance can only run once."
-        self._init_first_population()
+        self._init_first_population(loc=10)
         for _ in range(self._stop_after):
             if self._killer.kill_now:
                 exit()
@@ -103,19 +103,19 @@ class CMAES:
                 if not self._visuals_started:
                     self._visuals_started = True
                     
-                    plt.rcParams["figure.figsize"] = (8,9)
+                    plt.rcParams["figure.figsize"] = (16,9)
                     plt.rcParams['font.size'] = '22'
                     # plt.tight_layout()
-                    title = "Iteracja " + str(self._generation) + ", \n"
-                    title += "Liczebność populacji: " + str(self._lambda) + ", \n"
-                    title += "Wymiarowość: " + str(self._N) + ", \n"
-
                     self._fig, (self._ax1, self._ax2) = plt.subplots(1, 2)
-                    self._fig.suptitle(title)
                     self._fig.subplots_adjust(top = 0.8, bottom = 0.1, left = 0.1, right = 0.99)
 
                 self._draw_features()
                 self._draw_values()
+                title = "Iteracja " + str(self._generation) + ", \n"
+                title += "Liczebność populacji: " + str(self._lambda) + ", \n"
+                title += "Wymiarowość: " + str(self._N) + ", \n"
+                self._fig.suptitle(title)
+
                 plt.pause(_DELAY)
             self._update()
             self._new_generation()
@@ -160,7 +160,6 @@ class CMAES:
         self._mean_s = np.mean(selected, axis=0)
 
         self._path = (1-self._c) * self._path + self._c * (self._mean_s - self._mean_m)
-        print(self._mean_s - self._mean_m)
 
         self._populations.appendleft(selected)
         if len(self._populations) > self._H:
@@ -176,7 +175,7 @@ class CMAES:
         diff = self._populations[history_index][x1_index] - self._populations[history_index][x2_index]
         diff *= self._F
         diff += self._path * self._chi * np.random.normal()
-        return self._mean_s + self._F * diff + self._EPS * np.random.standard_normal(self._N)
+        return self._mean_s + diff + self._EPS * np.random.standard_normal(self._N)
 
     def mean_history(self) -> List[float]:
         return self._mean_history
@@ -184,7 +183,7 @@ class CMAES:
     def _evaluate(self, x):
         # WORKAROUND:
         if self._count_eval < self._budget:
-            return CRITERIA[0](x)
+            return functions.rosenbrock(x)
         return self._worst_fitness
         # if self._count_eval < self._budget:
         #     self._count_eval += 1
@@ -195,36 +194,31 @@ class CMAES:
         self._ax1.clear()
         self._ax1.grid()
 
-        self._ax1.axis('equal')
+        # self._ax1.axis('equal')
 
         self._ax1.axvline(0, linewidth=4, c='black')
         self._ax1.axhline(0, linewidth=4, c='black')
         x1 = [point[0][-1] for point in self._last_population]
         x2 = [point[0][-2] for point in self._last_population]
-        sizes = [50 - point[1] for point in self._last_population]
-        self._ax1.scatter(x1, x2, s=sizes)
+        self._ax1.scatter(x1, x2, s=50)
         x1 = [point[-1] for point in self._populations[0]]
         x2 = [point[-2] for point in self._populations[0]]
-        sizes = [30 - point[1] for point in self._populations[0]]
-        self._ax1.scatter(x1, x2, s=sizes)
+        self._ax1.scatter(x1, x2, s=15)
         # self._ax1.scatter(self._mean_m[-1], self._mean_m[-2], s=100, c='black')
         # self._ax1.scatter(self._mean_s[-1], self._mean_s[-2], s=100, c='green')
-        zoom_out = 5
+        zoom_out = 1.2
         max1 = zoom_out*max([abs(point[0][-1]) for point in self._last_population])
         max2 = zoom_out*max([abs(point[0][-2]) for point in self._last_population])
-        self._ax1.set_xlim(-max1, max1)
-        self._ax1.set_ylim(-max2, max2)
-
-        title = "Iteracja " + str(self._generation) + ", \n"
-        title += "Liczebność populacji: " + str(self._lambda) + ", \n"
-        title += "Wymiarowość: " + str(self._N) + ", \n"
-        self._fig.suptitle(title)
+        maxx = max(max1, max2)
+        maxx = 2*np.exp(np.ceil(np.log(maxx)/2)*2)
+        self._ax1.set_xlim(-maxx, maxx)
+        self._ax1.set_ylim(-maxx, maxx)
 
     def _draw_values(self, _ = None):
         self._ax2.clear()
         self._ax2.grid()
 
-        self._ax2.axis('equal')
+        # self._ax2.axis('equal')
 
         self._ax2.axvline(0, linewidth=4, c='black')
         self._ax2.axhline(0, linewidth=4, c='black')
@@ -236,11 +230,12 @@ class CMAES:
         self._ax2.scatter(x1, x2, s=15)
         # self._ax2.scatter(self._mean_m[-1], self._mean_m[-2], s=100, c='black')
         # self._ax2.scatter(self._mean_s[-1], self._mean_s[-2], s=100, c='green')
-        zoom_out = 5
+        zoom_out = 1.2
         max1 = zoom_out*max([abs(point[0][-1]) for point in self._last_population])
         max2 = zoom_out*max([abs(point[0][-2]) for point in self._last_population])
-        self._ax2.set_xlim(-max1, max1)
-        self._ax2.set_ylim(-max2, max2)
+        maxx = max(max1, max2)
+        maxx = 2*np.exp(np.ceil(np.log(maxx)/2)*2)
+        self._ax2.set_xlim(-maxx, maxx)
+        self._ax2.set_ylim(-maxx, maxx)
 
-if __name__ == "__main__":
-    CMAES(None, 2, 2, None, None)
+# if __name__ == "__main__":
