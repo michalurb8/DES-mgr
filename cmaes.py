@@ -1,18 +1,18 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from typing import List, Tuple
+from typing import List
 from collections import deque
 import signal
 import functions
+from ndrank import calcRank
 
-######################
-CRITERIA = [lambda x: np.dot(x,x)] #, lambda x: np.dot(x-2, x+3)]
-######################
+CRITERIA = [functions.rosenbrock]
+CRITERIA = [functions.rastrigin, functions.rosenbrock]
+CRITERIA = functions.criteriumList[0]
 
-_MAXIMISE = False
 _POINT_MAX = 1e100
 
-_DELAY = 0.05
+_DELAY = 0.2
 
 infp = float('inf')
 infn = float('-inf')
@@ -95,7 +95,7 @@ class CMAES:
 
     def _generation_loop(self):
         assert self._results == [], "One algorithm instance can only run once."
-        self._init_first_population(loc=10)
+        self._init_first_population(loc=1)
         for _ in range(self._stop_after):
             if self._killer.kill_now:
                 exit()
@@ -135,11 +135,12 @@ class CMAES:
         self._last_population = []
         for _ in range(self._lambda):
             new = np.random.normal(loc = loc, scale = scale, size = self._N)
-            value = self._evaluate(new)
-            rank = None
-            self._last_population.append((new, value, rank))
+            values = self._evaluate(new)
+            rank = infp
+            self._last_population.append([new, values, rank])
 
-        selected = np.array([x[0] for x in sorted(self._last_population, key=lambda x: x[1], reverse=_MAXIMISE)][:self._mu]) ### implement NSGA sorting
+        calcRank(self._last_population)
+        selected = np.array([x[0] for x in sorted(self._last_population, key=lambda x: x[2])][:self._mu]) ### implement NSGA sorting
 
         self._mean_m = np.mean(np.array([x[0] for x in self._last_population]), axis=0)
         self._mean_s = np.mean(selected, axis=0)
@@ -150,11 +151,12 @@ class CMAES:
         self._last_population = []
         for _ in range(self._lambda):
             new = self._sample_solution()
-            value = self._evaluate(new)
-            rank = None
-            self._last_population.append((new, value, rank))
+            values = self._evaluate(new)
+            rank = infp
+            self._last_population.append([new, values, rank])
 
-        selected = np.array([x[0] for x in sorted(self._last_population, key=lambda x: x[1], reverse=_MAXIMISE)][:self._mu]) ### implement NSGA sorting
+        calcRank(self._last_population)
+        selected = np.array([x[0] for x in sorted(self._last_population, key=lambda x: x[2])][:self._mu]) ### implement NSGA sorting
 
         self._mean_m = np.mean(np.array([x[0] for x in self._last_population]), axis=0)
         self._mean_s = np.mean(selected, axis=0)
@@ -181,20 +183,16 @@ class CMAES:
         return self._mean_history
 
     def _evaluate(self, x):
-        # WORKAROUND:
-        if self._count_eval < self._budget:
-            return functions.rosenbrock(x)
-        return self._worst_fitness
-        # if self._count_eval < self._budget:
-        #     self._count_eval += 1
-        #     return np.array([f(x) for f in CRITERIA])
-        # return np.array([self._worst_fitness for _ in CRITERIA])
+        if self._count_eval >= self._budget:
+            return [self._worst_fitness for _ in range(len(CRITERIA))]
+        self._count_eval += 1
+        return [f(x) for f in CRITERIA]
 
-    def _draw_features(self, _ = None):
+    def _draw_features(self):
         self._ax1.clear()
         self._ax1.grid(zorder = 1)
 
-        axis_equal = False
+        axis_equal = True
 
         self._ax1.axvline(0, linewidth=4, c='black', zorder = 2)
         self._ax1.axhline(0, linewidth=4, c='black', zorder = 2)
@@ -204,9 +202,9 @@ class CMAES:
         x1 = [point[-1] for point in self._populations[0]]
         x2 = [point[-2] for point in self._populations[0]]
         self._ax1.scatter(x1, x2, s=15, zorder = 3)
-        # self._ax1.scatter(self._mean_m[-1], self._mean_m[-2], s=100, c='black')
-        # self._ax1.scatter(self._mean_s[-1], self._mean_s[-2], s=100, c='green')
-        treshold = 2
+        self._ax1.scatter(self._mean_m[-1], self._mean_m[-2], s=50, c='black', zorder = 4)
+        self._ax1.scatter(self._mean_s[-1], self._mean_s[-2], s=50, c='green', zorder = 4)
+        treshold = 1.1
 
         if axis_equal:
             max1 = max([abs(point[0][-1]) for point in self._last_population])
@@ -224,28 +222,14 @@ class CMAES:
         self._ax1.set_xlim(-max1, max1)
         self._ax1.set_ylim(-max2, max2)
 
-    def _draw_values(self, _ = None):
+    def _draw_values(self):
         self._ax2.clear()
         self._ax2.grid()
 
-        # self._ax2.axis('equal')
-
-        self._ax2.axvline(0, linewidth=4, c='black')
-        self._ax2.axhline(0, linewidth=4, c='black')
-        x1 = [point[0][-1] for point in self._last_population]
-        x2 = [point[0][-2] for point in self._last_population]
+        x1 = [point[1][-1] for point in self._last_population]
+        x2 = [point[1][-2] for point in self._last_population] if len(CRITERIA) > 1 else [0]*self._mu
         self._ax2.scatter(x1, x2, s=50)
-        x1 = [point[-1] for point in self._populations[0]]
-        x2 = [point[-2] for point in self._populations[0]]
-        self._ax2.scatter(x1, x2, s=15)
-        # self._ax2.scatter(self._mean_m[-1], self._mean_m[-2], s=100, c='black')
-        # self._ax2.scatter(self._mean_s[-1], self._mean_s[-2], s=100, c='green')
-        zoom_out = 1.2
-        max1 = zoom_out*max([abs(point[0][-1]) for point in self._last_population])
-        max2 = zoom_out*max([abs(point[0][-2]) for point in self._last_population])
-        maxx = max(max1, max2)
-        maxx = 2*np.exp(np.ceil(np.log(maxx)/2)*2)
-        self._ax2.set_xlim(-maxx, maxx)
-        self._ax2.set_ylim(-maxx, maxx)
+
+        self._ax2.axis('auto')
 
 # if __name__ == "__main__":
