@@ -1,18 +1,17 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FormatStrFormatter
 from typing import List
 from collections import deque
 import signal
 import functions
 from ndrank import calcRank
 
-CRITERIA = [functions.rosenbrock]
-CRITERIA = [functions.rastrigin, functions.rosenbrock]
 CRITERIA = functions.criteriumList[0]
 
 _POINT_MAX = 1e100
 
-_DELAY = 0.2
+_DELAY = 0.01
 
 infp = float('inf')
 infn = float('-inf')
@@ -47,7 +46,7 @@ class CMAES:
         self._stop_after = stop_after
         self._visuals = visuals and self._N >= 2
 
-        self._F = 1/np.sqrt(2)
+        self._F = 1.1/np.sqrt(2)
         self._C = 4/(self._N + 4)
         self._H = 6 + 3*np.sqrt(self._N)
 
@@ -69,7 +68,7 @@ class CMAES:
         self._mu = self._lambda // 2
 
         # E||N(0, I)||
-        self._chi = np.sqrt(self._N) * (1 - 1 / (4 * self._N) + 1 / (21 * self._N ** 2))
+        self._chi = 1*np.sqrt(self._N) * (1 - 1 / (4 * self._N) + 1 / (21 * self._N ** 2))
 
         # noise intensity
         self._EPS = 10 ** (-8)/ self._chi
@@ -95,7 +94,7 @@ class CMAES:
 
     def _generation_loop(self):
         assert self._results == [], "One algorithm instance can only run once."
-        self._init_first_population(loc=1)
+        self._init_first_population(loc=10*np.ones(self._N), scale=1)
         for _ in range(self._stop_after):
             if self._killer.kill_now:
                 exit()
@@ -196,14 +195,14 @@ class CMAES:
 
         self._ax1.axvline(0, linewidth=4, c='black', zorder = 2)
         self._ax1.axhline(0, linewidth=4, c='black', zorder = 2)
-        x1 = [point[0][-1] for point in self._last_population]
-        x2 = [point[0][-2] for point in self._last_population]
+        x1 = [point[0][-2] for point in self._last_population]
+        x2 = [point[0][-1] for point in self._last_population]
         self._ax1.scatter(x1, x2, s=50, zorder = 3)
-        x1 = [point[-1] for point in self._populations[0]]
-        x2 = [point[-2] for point in self._populations[0]]
+        x1 = [point[-2] for point in self._populations[0]]
+        x2 = [point[-1] for point in self._populations[0]]
         self._ax1.scatter(x1, x2, s=15, zorder = 3)
-        self._ax1.scatter(self._mean_m[-1], self._mean_m[-2], s=50, c='black', zorder = 4)
-        self._ax1.scatter(self._mean_s[-1], self._mean_s[-2], s=50, c='green', zorder = 4)
+        # self._ax1.scatter(self._mean_m[-2], self._mean_m[-1], s=50, c='black', zorder = 4)
+        # self._ax1.scatter(self._mean_s[-2], self._mean_s[-1], s=50, c='green', zorder = 4)
         treshold = 1.1
 
         if axis_equal:
@@ -223,13 +222,17 @@ class CMAES:
         self._ax1.set_ylim(-max2, max2)
 
     def _draw_values(self):
-        self._ax2.clear()
-        self._ax2.grid()
+        if not self._generation % 100:
+            self._ax2.clear()
+            self._ax2.grid()
 
-        x1 = [point[1][-1] for point in self._last_population]
-        x2 = [point[1][-2] for point in self._last_population] if len(CRITERIA) > 1 else [0]*self._mu
-        self._ax2.scatter(x1, x2, s=50)
+        x1 = [point[1][-2] for point in self._last_population]
+        x2 = [point[1][-1] for point in self._last_population] if len(CRITERIA) > 1 else [0]*self._mu
+        self._ax2.scatter(x1, x2, s=50, c=[[(self._generation%c/c) for c in [100, 200, 300]] for _ in range(len(x1))])
+        self._ax2.yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
 
         self._ax2.axis('auto')
+        self._ax2.set_xlim(0)
+        self._ax2.set_ylim(0)
 
 # if __name__ == "__main__":

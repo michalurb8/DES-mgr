@@ -13,7 +13,7 @@ parser.add_argument('-d', '--dimensions', type=int, default=10,
 parser.add_argument('-l', '--lbd', type=int, default=None,
                     help='Population size.')
 
-parser.add_argument('-s', '--stop', type=int, default=1000,
+parser.add_argument('-s', '--stop', type=int, default=10000,
                     help='Stop after s iterations')
 
 parser.add_argument('-v', '--vis', default=False,
