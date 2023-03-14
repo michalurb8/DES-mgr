@@ -24,7 +24,7 @@ class Killer:
     def exitt(self):
         self.kill_now = True
 
-class CMAES:
+class DES:
     """
     Parameters
     ----------
@@ -71,8 +71,8 @@ class CMAES:
         self._chi = 1*np.sqrt(self._N) * (1 - 1 / (4 * self._N) + 1 / (21 * self._N ** 2))
 
         # noise intensity
-        # self._EPS = 10 ** (-8)/ self._chi
-        self._EPS = 1/ self._chi
+        self._EPS = 10 ** (-8)/ self._chi
+        # self._EPS = 1/ self._chi
 
         # Evolution paths
         self._path = np.zeros(self._N)

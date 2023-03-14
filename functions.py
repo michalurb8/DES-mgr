@@ -49,12 +49,17 @@ def Get_by_name(name: str) -> Callable:
 
 
 
-gaussian2 = lambda p, xmu=0, ymu=0 : 1-np.exp(-((p[0]-xmu)**2+(p[1]-ymu)**2)/4)
-gaussian3 = lambda p, xmu=0, ymu=0, zmu=0 : 1-np.exp(-((p[0]-xmu)**2+(p[1]-ymu)**2+(p[2]-zmu)**2)/4)
-gaussiann = lambda p, mean: 1-np.exp(-np.dot(p-mean, p-mean)/4)
+gaussian2 = lambda p, xmu=0, ymu=0 : 1-np.exp(-((p[0]-xmu)**2+(p[1]-ymu)**2))
+gaussian3 = lambda p, xmu=0, ymu=0, zmu=0 : 1-np.exp(-((p[0]-xmu)**2+(p[1]-ymu)**2+(p[2]-zmu)**2))
+gaussiann = lambda p, mean: 1-np.exp(-np.dot(p-mean, p-mean)/100)
 
 criteriumList = [
 
+ [ # rosenbrock i punkt
+        lambda p : rosenbrock(p),
+        lambda p : gaussiann(p, 2*np.ones(len(p)))
+        # lambda p : gaussiann(p, np.zeros(len(p)))
+    ],
 
     [ # gwiazda
         lambda p : gaussian2(p, -2, 2) + 1.01*gaussian2(p, 2, -2),
@@ -66,10 +71,6 @@ criteriumList = [
         lambda p : gaussian2(p, 2, 2) + gaussian2(p, -2, -2)
     ],
 
- [ # rosenbrock i punkt
-        lambda p : rosenbrock(p),
-        lambda p : gaussiann(p, 2*np.ones(len(p)))
-    ],
     [ # równe hantle plus nierówny punkt
         lambda p : gaussian2(p, 2, 2) + gaussian2(p, 2, -2),
         lambda p : gaussian2(p, -2, 0.1),

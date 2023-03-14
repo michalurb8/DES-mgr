@@ -1,5 +1,5 @@
 import argparse
-from cmaes import CMAES
+from des import DES
 
 parser = argparse.ArgumentParser(prog="Multi-DES",
                                  description='This program allows you to run DES')
@@ -21,4 +21,4 @@ parser.add_argument('-v', '--vis', default=False,
 
 if __name__ == '__main__':
     args = parser.parse_args()
-    CMAES(args.dimensions, 1, args.lbd, args.stop, args.vis)
+    DES(args.dimensions, 1, args.lbd, args.stop, args.vis)

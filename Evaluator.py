@@ -1,5 +1,5 @@
 from lib2to3.pgen2.literals import evalString
-from cmaes import CMAES
+from des import DES
 from typing import List, Tuple
 import numpy as np
 import matplotlib.pyplot as plt
@@ -49,7 +49,7 @@ def evaluate(repair_mode: str, dimensions: int, iterations: int, objectives: Lis
         for iteration in range(iterations):
             stdout.write(f"\rIteration: {1+iteration} / {iterations}")
             stdout.flush()
-            algo = CMAES(objective, dimensions, repair_mode, lambda_arg, stop_after, visual, correction) # algorithm runs here
+            algo = DES(objective, dimensions, repair_mode, lambda_arg, stop_after, visual, correction) # algorithm runs here
             if evals_per_gen == None:
                 evals_per_gen = algo.evals_per_iteration()
             else:
