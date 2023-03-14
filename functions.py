@@ -55,24 +55,24 @@ gaussiann = lambda p, mean: 1-np.exp(-np.dot(p-mean, p-mean)/4)
 
 criteriumList = [
 
- [ # rosenbrock i punkt
-        lambda p : rosenbrock(p),
-        lambda p : gaussiann(p, np.array([1,2,3,4,5]))
-    ],
-    [ # równe hantle plus nierówny punkt
-        lambda p : gaussian2(p, 2, 2) + gaussian2(p, 2, -2),
-        lambda p : gaussian2(p, -2, 0.1),
-    ],
-
-    [ # gwiazda
-        lambda p : gaussian2(p, -2, 2) + 1.01*gaussian2(p, 2, -2),
-        lambda p : gaussian2(p, 2, 2) + gaussian2(p, -2, -2),
-    ],
 
     [ # gwiazda
         lambda p : gaussian2(p, -2, 2) + 1.01*gaussian2(p, 2, -2),
         lambda p : gaussian2(p, 2, 2.2) + gaussian2(p, -2, -2),
         lambda p : gaussian2(p, 2, 0)
+    ],
+    [ # gwiazda
+        lambda p : gaussian2(p, -2, 2) + 1.01*gaussian2(p, 2, -2),
+        lambda p : gaussian2(p, 2, 2) + gaussian2(p, -2, -2)
+    ],
+
+ [ # rosenbrock i punkt
+        lambda p : rosenbrock(p),
+        lambda p : gaussiann(p, 2*np.ones(len(p)))
+    ],
+    [ # równe hantle plus nierówny punkt
+        lambda p : gaussian2(p, 2, 2) + gaussian2(p, 2, -2),
+        lambda p : gaussian2(p, -2, 0.1),
     ],
 
     [ # dwa hantle równowaga plus punkt

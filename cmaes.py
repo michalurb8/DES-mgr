@@ -5,7 +5,7 @@ from typing import List
 from collections import deque
 import signal
 import functions
-from ndrank import calcRank
+import ndrank
 
 CRITERIA = functions.criteriumList[0]
 
@@ -46,7 +46,7 @@ class CMAES:
         self._stop_after = stop_after
         self._visuals = visuals and self._N >= 2
 
-        self._F = 1.1/np.sqrt(2)
+        self._F = 1/np.sqrt(2)
         self._C = 4/(self._N + 4)
         self._H = 6 + 3*np.sqrt(self._N)
 
@@ -71,7 +71,8 @@ class CMAES:
         self._chi = 1*np.sqrt(self._N) * (1 - 1 / (4 * self._N) + 1 / (21 * self._N ** 2))
 
         # noise intensity
-        self._EPS = 10 ** (-8)/ self._chi
+        # self._EPS = 10 ** (-8)/ self._chi
+        self._EPS = 1/ self._chi
 
         # Evolution paths
         self._path = np.zeros(self._N)
@@ -86,6 +87,7 @@ class CMAES:
         self._worst_fitness = infp
 
         self._populations = deque([])
+        self._ndpoints = []
 
         # Run the algorithm
         self._killer = Killer()
@@ -138,7 +140,8 @@ class CMAES:
             rank = infp
             self._last_population.append([new, values, rank])
 
-        calcRank(self._last_population)
+        self._ndpoints = ndrank.getNonDominated(self._last_population)
+        ndrank.calcRank(self._last_population)
         selected = np.array([x[0] for x in sorted(self._last_population, key=lambda x: x[2])][:self._mu]) ### implement NSGA sorting
 
         self._mean_m = np.mean(np.array([x[0] for x in self._last_population]), axis=0)
@@ -154,7 +157,8 @@ class CMAES:
             rank = infp
             self._last_population.append([new, values, rank])
 
-        calcRank(self._last_population)
+        ndrank.calcRank(self._last_population)
+        self._ndpoints = ndrank.getNonDominated(self._ndpoints.copy() + [point for point in self._last_population if point[2] == 0])
         selected = np.array([x[0] for x in sorted(self._last_population, key=lambda x: x[2])][:self._mu]) ### implement NSGA sorting
 
         self._mean_m = np.mean(np.array([x[0] for x in self._last_population]), axis=0)
@@ -206,15 +210,15 @@ class CMAES:
         treshold = 1.1
 
         if axis_equal:
-            max1 = max([abs(point[0][-1]) for point in self._last_population])
+            max1 = max([abs(point[0][-2]) for point in self._last_population])
             max1 = np.exp(np.ceil(np.log(max1)/treshold)*treshold)
-            max2 = max([abs(point[0][-2]) for point in self._last_population])
+            max2 = max([abs(point[0][-1]) for point in self._last_population])
             max2 = np.exp(np.ceil(np.log(max2)/treshold)*treshold)
             self._ax1.axis('equal')
             max1 = max2 = max(max1,max2)
         else:
-            max1 = 1.2*max([abs(point[0][-1]) for point in self._last_population])
-            max2 = 1.2*max([abs(point[0][-2]) for point in self._last_population])
+            max1 = 1.2*max([abs(point[0][-2]) for point in self._last_population])
+            max2 = 1.2*max([abs(point[0][-1]) for point in self._last_population])
             self._ax1.axis('auto')
 
 
@@ -222,17 +226,29 @@ class CMAES:
         self._ax1.set_ylim(-max2, max2)
 
     def _draw_values(self):
-        if not self._generation % 100:
-            self._ax2.clear()
-            self._ax2.grid()
+        # if not self._generation % 100:
+        #     self._ax2.clear()
+        #     self._ax2.grid()
+        self._ax2.clear()
+        self._ax2.grid()
+        x1 = [point[1][-2] for point in self._ndpoints]
+        x2 = [point[1][-1] for point in self._ndpoints]
+        self._ax2.scatter(x1, x2, s=50, c='red')
 
         x1 = [point[1][-2] for point in self._last_population]
         x2 = [point[1][-1] for point in self._last_population] if len(CRITERIA) > 1 else [0]*self._mu
-        self._ax2.scatter(x1, x2, s=50, c=[[(self._generation%c/c) for c in [100, 200, 300]] for _ in range(len(x1))])
+        self._ax2.scatter(x1, x2, s=30, c='black')
         self._ax2.yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
 
+        min1 = min([point[1][-2] for point in self._ndpoints])
+        min2 = min([point[1][-1] for point in self._ndpoints])
+
+        max1 = max([point[1][-2] for point in self._ndpoints])
+        max2 = max([point[1][-1] for point in self._ndpoints])
+        rang1 = max1-min1
+        rang2 = max2-min2
         self._ax2.axis('auto')
-        self._ax2.set_xlim(0)
-        self._ax2.set_ylim(0)
+        self._ax2.set_xlim(min1-rang1/5, max1 + rang1/5)
+        self._ax2.set_ylim(min2-rang2/5, max2+rang2/5)
 
 # if __name__ == "__main__":

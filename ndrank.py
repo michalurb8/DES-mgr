@@ -1,5 +1,6 @@
 from typing import List
 import numpy as np
+import random
 INF = float('inf')
 
 def _isDominated(p1: np.array, p2: np.array):
@@ -32,10 +33,16 @@ def calcRank(points: List) -> None:
         currentRank += 1
 
 def getNonDominated(points: List) -> List:
-    pass
-
-def removeDominated(points: List) -> List:
-    pass
+    ndPoints = []
+    for currentPoint in points:
+        dominated = False
+        for otherPoint in points:
+            if _isDominated(currentPoint, otherPoint):
+                dominated = True
+        if not dominated:
+            ndPoints.append(currentPoint)
+    random.shuffle(ndPoints)
+    return ndPoints[:200]
 
 if __name__ == '__main__':
     points = [[[],[1,2,3], INF], [[], [2,3,4], INF], [[], [1,1,1], INF]]
