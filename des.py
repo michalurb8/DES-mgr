@@ -39,10 +39,9 @@ class DES:
     visuals: bool
         If True, every algorithm generation will be visualised (only 2 first dimensions)
     """
-    def __init__(self, dimensions: int = 2, objective_count: int = 1, lambda_arg: int = None, stop_after: int = 50, visuals: bool = False):
+    def __init__(self, dimensions: int = 2, lambda_arg: int = None, stop_after: int = 50, visuals: bool = False):
         assert dimensions > 0, "Number of dimensions must be greater than 0"
         self._N = dimensions
-        self._M = objective_count
         self._stop_after = stop_after
         self._visuals = visuals and self._N >= 2
 
@@ -83,7 +82,7 @@ class DES:
 
         # Store important values at each generation
         self._results = []
-        self._mean_history = []
+        self._history = []
         self._worst_fitness = infp
 
         self._populations = deque([])
@@ -120,6 +119,9 @@ class DES:
                 plt.pause(_DELAY)
             self._update()
             self._new_generation()
+            self._evaluate()
+        plt.ioff()
+        plt.close()
 
     def _update(self) -> None:
         assert len(self._populations) <= self._H, f"There should be no more than H populations saved in history"
@@ -134,7 +136,7 @@ class DES:
         self._last_population = []
         for _ in range(self._lambda):
             new = np.random.normal(loc = loc, scale = scale, size = self._N)
-            values = self._evaluate(new)
+            values = self._fitness(new)
             rank = infp
             self._last_population.append([new, values, rank])
 
@@ -151,7 +153,7 @@ class DES:
         self._last_population = []
         for _ in range(self._lambda):
             new = self._sample_solution()
-            values = self._evaluate(new)
+            values = self._fitness(new)
             rank = infp
             self._last_population.append([new, values, rank])
 
@@ -183,7 +185,7 @@ class DES:
     def mean_history(self) -> List[float]:
         return self._mean_history
 
-    def _evaluate(self, x):
+    def _fitness(self, x):
         if self._count_eval >= self._budget:
             return [self._worst_fitness for _ in range(len(CRITERIA))]
         self._count_eval += 1
@@ -219,14 +221,10 @@ class DES:
             max2 = 1.2*max([abs(point[0][-1]) for point in self._last_population])
             self._ax1.axis('auto')
 
-
         self._ax1.set_xlim(-max1, max1)
         self._ax1.set_ylim(-max2, max2)
 
     def _draw_values(self):
-        # if not self._generation % 100:
-        #     self._ax2.clear()
-        #     self._ax2.grid()
         self._ax2.clear()
         self._ax2.grid()
         x1 = [point[1][-2] for point in self._ndpoints]
@@ -243,9 +241,27 @@ class DES:
 
         max1 = max([point[1][-2] for point in self._ndpoints])
         max2 = max([point[1][-1] for point in self._ndpoints])
-        rang1 = max1-min1
-        rang2 = max2-min2
+        rang1 = max1-min1 if max1-min1 > self._EPS else 0.001
+        rang2 = max2-min2 if max2-min2 > self._EPS else 0.001
         self._ax2.axis('auto')
         self._ax2.set_xlim(min1-rang1/5, max1 + rang1/5)
         self._ax2.set_ylim(min2-rang2/5, max2+rang2/5)
     
+    def _evaluate(self):
+        IPSP = self._IPSP()
+        IGDX = self._IGDX()
+        IGDF = self._IGDF()
+        IHV  = self._IHV()
+        self._history.append((IPSP, IGDX, IGDF, IHV))
+
+    def _IPSP(self): #calculate the reciprocal of Pareto Set Proximity TODO
+        return int(max([point[1][-1] for point in self._last_population])*100)
+    def _IGDX(self): #calculate the Inverted Generational Difference in decision space TODO
+        return int(max([point[1][-2] for point in self._last_population])*100)
+    def _IGDF(self): #calculate the Inverted Generational Difference in objective space TODO
+        return 1
+    def _IHV(self): #calculate the reciprocal of Hypervolume
+        return 0
+    
+    def get_metrics(self):
+        return self._history

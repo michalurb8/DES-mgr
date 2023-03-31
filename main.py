@@ -21,4 +21,4 @@ parser.add_argument('-v', '--vis', default=False,
 
 if __name__ == '__main__':
     args = parser.parse_args()
-    DES(args.dimensions, 1, args.lbd, args.stop, args.vis)
+    DES(args.dimensions, args.lbd, args.stop, args.vis)
