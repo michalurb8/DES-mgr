@@ -46,7 +46,7 @@ class DES:
         self._stop_after = stop_after
         self._visuals = visuals and self._N >= 2
 
-        self._F = 1/np.sqrt(2)
+        self._F = 1.1/np.sqrt(2)
         self._C = 4/(self._N + 4)
         self._H = 6 + 3*np.sqrt(self._N)
 
@@ -104,7 +104,7 @@ class DES:
                 if not self._visuals_started:
                     self._visuals_started = True
                     
-                    plt.rcParams["figure.figsize"] = (16,9)
+                    plt.rcParams["figure.figsize"] = (12,7)
                     plt.rcParams['font.size'] = '22'
                     # plt.tight_layout()
                     self._fig, (self._ax1, self._ax2) = plt.subplots(1, 2)
@@ -129,8 +129,6 @@ class DES:
             assert np.all(
                 np.abs(point) < _POINT_MAX
             ), f"Absolute value of all generated points must be less than {_POINT_MAX} to avoid overflow errors."
-
-        #### UPDATE TODO
     
     def _init_first_population(self, loc: np.array = 0, scale: float = 1) -> None:
         self._last_population = []
@@ -142,7 +140,7 @@ class DES:
 
         self._ndpoints = ndrank.getNonDominated(self._last_population)
         ndrank.calcRank(self._last_population)
-        selected = np.array([x[0] for x in sorted(self._last_population, key=lambda x: x[2])][:self._mu]) ### implement NSGA sorting
+        selected = np.array([x[0] for x in sorted(self._last_population, key=lambda x: x[2])][:self._mu])
 
         self._mean_m = np.mean(np.array([x[0] for x in self._last_population]), axis=0)
         self._mean_s = np.mean(selected, axis=0)
@@ -159,7 +157,7 @@ class DES:
 
         ndrank.calcRank(self._last_population)
         self._ndpoints = ndrank.getNonDominated(self._ndpoints.copy() + [point for point in self._last_population if point[2] == 0])
-        selected = np.array([x[0] for x in sorted(self._last_population, key=lambda x: x[2])][:self._mu]) ### implement NSGA sorting
+        selected = np.array([x[0] for x in sorted(self._last_population, key=lambda x: x[2])][:self._mu])
 
         self._mean_m = np.mean(np.array([x[0] for x in self._last_population]), axis=0)
         self._mean_s = np.mean(selected, axis=0)
@@ -205,8 +203,8 @@ class DES:
         x1 = [point[-2] for point in self._populations[0]]
         x2 = [point[-1] for point in self._populations[0]]
         self._ax1.scatter(x1, x2, s=15, zorder = 3)
-        # self._ax1.scatter(self._mean_m[-2], self._mean_m[-1], s=50, c='black', zorder = 4)
-        # self._ax1.scatter(self._mean_s[-2], self._mean_s[-1], s=50, c='green', zorder = 4)
+        self._ax1.scatter(self._mean_m[-2], self._mean_m[-1], s=50, c='black', zorder = 4)
+        self._ax1.scatter(self._mean_s[-2], self._mean_s[-1], s=50, c='green', zorder = 4)
         treshold = 1.1
 
         if axis_equal:
@@ -250,5 +248,4 @@ class DES:
         self._ax2.axis('auto')
         self._ax2.set_xlim(min1-rang1/5, max1 + rang1/5)
         self._ax2.set_ylim(min2-rang2/5, max2+rang2/5)
-
-# if __name__ == "__main__":
+    
