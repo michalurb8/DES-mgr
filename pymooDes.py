@@ -86,36 +86,12 @@ class DES(Algorithm):
         # not necessary - first iteration only generates randomly and evaluates
         pass
 
-    def _infill(self):
-        # do the mating using the current population
-        off = self.mating.do(self.problem, self.pop, self.n_offsprings, algorithm=self)
-
-        # if the mating could not generate any new offspring (duplicate elimination might make that happen)
-        if len(off) == 0:
-            self.termination.force_termination = True
-            return
-
-        # if not the desired number of offspring could be created
-        elif len(off) < self.n_offsprings:
-            if self.verbose:
-                print("WARNING: Mating could not produce the required number of (unique) offsprings!")
-
-        return off
-
-    def _advance(self, infills=None, **kwargs):
-        # just set the new population as the newly generated individuals
-        self.pop = infills
-
-    def _sorting(self, pop, *args, n_survive=None, **kwargs):
+    def _sorting(self):
         # get the objective space values and objects
-        F = pop.get("F").astype(float, copy=False)
-
-        # the final indices of surviving individuals
-        sorted = []
+        F = self.pop.get("F").astype(float, copy=False)
 
         # do the non-dominated sorting until splitting front
         fronts = fast_non_dominated_sort(F)
-
         for k, front in enumerate(fronts):
 
             # calculate the crowding distance of the front
@@ -123,19 +99,45 @@ class DES(Algorithm):
 
             # save rank and crowding in the individual class
             for j, i in enumerate(front):
-                pop[i].set("rank", k)
-                pop[i].set("crowding", crowding_of_front[j])
+                self.pop[i].set("rank", k)
+                self.pop[i].set("crowding", crowding_of_front[j])
+        
+        sort_criteria = [lambda ind: ind.get('rank'), lambda ind: ind.get('crowding')*-1]
+        I = np.lexsort([criterium(self.pop) for criterium in reversed(sort_criteria)])
+        self.pop[:] = self.pop[I]
 
-            # current front sorted by crowding distance if splitting
-            if len(sorted) + len(front) > n_survive:
-                I = randomized_argsort(crowding_of_front, order='descending', method='numpy')
-                I = I[:(n_survive - len(sorted))]
+    def _infill(self):
+        _sorting()
 
-            # otherwise take the whole front unsorted
-            else:
-                I = np.arange(len(front))
 
-        pop.F = sorted
+        return off
+
+    def _advance(self, infills=None, **kwargs):
+        # just set the new population as the newly generated individuals
+        self.pop = infills
+
+def _sorting(pop):
+    # get the objective space values and objects
+    F = pop.get("F").astype(float, copy=False)
+
+    # do the non-dominated sorting until splitting front
+    fronts = fast_non_dominated_sort(F)
+    print(f"fronts: {fronts}\n")
+    for k, front in enumerate(fronts):
+
+        # calculate the crowding distance of the front
+        crowding_of_front = calc_crowding_distance(F[front, :])
+
+        # save rank and crowding in the individual class
+        for j, i in enumerate(front):
+            pop[i].set("rank", k)
+            pop[i].set("crowding", crowding_of_front[j])
+    
+    sort_criteria = [lambda ind: ind.get('rank'), lambda ind: ind.get('crowding')*-1]
+    I = np.lexsort([criterium(pop) for criterium in reversed(sort_criteria)])
+    sorted = pop[I]
+    return sorted
+
 
 def calc_crowding_distance(F, filter_out_duplicates=True):
     n_points, n_obj = F.shape
