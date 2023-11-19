@@ -2,61 +2,14 @@ import numpy as np
 
 from pymoo.core.duplicate import DefaultDuplicateElimination, NoDuplicateElimination
 from pymoo.core.algorithm import Algorithm
-from pymoo.core.survival import Survival
-from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting
-from pymoo.util.randomized_argsort import randomized_argsort
 from pymoo.core.repair import NoRepair
 from pymoo.core.initialization import Initialization
 from pymoo.termination.default import DefaultMultiObjectiveTermination
 from pymoo.util.misc import find_duplicates, has_feasible
 from pymoo.operators.sampling.rnd import FloatRandomSampling
-from pymoo.core.population import Population
 
-# ---------------------------------------------------------------------------------------------------------
-# Survival Selection
-# ---------------------------------------------------------------------------------------------------------
-
-class RankAndCrowdingSurvival(Survival):
-
-    def __init__(self, nds=None) -> None:
-        super().__init__(filter_infeasible=True)
-        self.nds = nds if nds is not None else NonDominatedSorting()
-
-    def _do(self, problem, pop, *args, n_survive=None, **kwargs):
-
-        # get the objective space values and objects
-        F = pop.get("F").astype(float, copy=False)
-
-        # the final indices of surviving individuals
-        survivors = []
-
-        # do the non-dominated sorting until splitting front
-        fronts = self.nds.do(F, n_stop_if_ranked=n_survive)
-
-        for k, front in enumerate(fronts):
-
-            # calculate the crowding distance of the front
-            crowding_of_front = calc_crowding_distance(F[front, :])
-
-            # save rank and crowding in the individual class
-            for j, i in enumerate(front):
-                pop[i].set("rank", k)
-                pop[i].set("crowding", crowding_of_front[j])
-
-            # current front sorted by crowding distance if splitting
-            if len(survivors) + len(front) > n_survive:
-                I = randomized_argsort(crowding_of_front, order='descending', method='numpy')
-                I = I[:(n_survive - len(survivors))]
-
-            # otherwise take the whole front unsorted
-            else:
-                I = np.arange(len(front))
-
-            # extend the survivors by all or selected individuals
-            survivors.extend(front[I])
-
-        return pop[survivors]
-
+from pymoo.util.randomized_argsort import randomized_argsort
+from pymoo.util.nds import fast_non_dominated_sort
 
 # =========================================================================================================
 # Implementation
@@ -65,37 +18,22 @@ class RankAndCrowdingSurvival(Survival):
 class DES(Algorithm):
 
     def __init__(self,
-                 pop_size=100,
                  sampling=FloatRandomSampling(),
-                 survival=RankAndCrowdingSurvival(),
                  eliminate_duplicates=DefaultDuplicateElimination(),
                  repair=None,
-                 advance_after_initial_infill=False,
                  **kwargs
                  ):
 
         super().__init__(save_history=True, **kwargs)
 
-        # the population size used
-        self.pop_size = pop_size
-
-        # DES - specific parameters:
+        # DES specific parameters (filled during _setup()):
         self._F = None
         self._C = None
         self._H = None
 
-        # whether the algorithm should be advanced after initialization or not
-        self.advance_after_initial_infill = advance_after_initial_infill
-
-        # the survival for the algorithm
-        self.survival = survival
-
-        # number of offsprings to generate through recombination
-        self.n_offsprings = self.pop_size
-
-        # if the number of offspring is not set - equal to population size
-        if self.n_offsprings is None:
-            self.n_offsprings = pop_size
+        # Algorithm class parameters (filled during _setup()):
+        self.pop_size = None
+        self.n_offsprings = None
 
         # set the duplicate detection class - a boolean value chooses the default duplicate detection
         if isinstance(eliminate_duplicates, bool):
@@ -120,7 +58,7 @@ class DES(Algorithm):
         self.off = None
 
         self.termination = DefaultMultiObjectiveTermination()
-        self.tournament_type = 'comp_by_dom_and_crowding'
+        self.tournament_type = 'comp_by_rank_and_crowding'
 
     def _set_optimum(self, **kwargs):
         if not has_feasible(self.pop):
@@ -130,9 +68,14 @@ class DES(Algorithm):
     
     def _setup(self, problem, **kwargs):
         N = problem.n_var
+
         self._F = 1/np.sqrt(2)
         self._C = 4/(N + 4)
         self._H = 6 + 3*np.sqrt(N)
+
+        self.pop_size = 4 + np.floor(3 * np.log10(N))
+        self.n_offsprings = self.pop_size
+
         return self
 
     def _initialize_infill(self):
@@ -140,8 +83,8 @@ class DES(Algorithm):
         return pop
 
     def _initialize_advance(self, infills=None, **kwargs):
-        if self.advance_after_initial_infill:
-            self.pop = self.survival.do(self.problem, infills, n_survive=len(infills), algorithm=self, **kwargs)
+        # not necessary - first iteration only generates randomly and evaluates
+        pass
 
     def _infill(self):
         # do the mating using the current population
@@ -160,19 +103,39 @@ class DES(Algorithm):
         return off
 
     def _advance(self, infills=None, **kwargs):
+        # just set the new population as the newly generated individuals
+        self.pop = infills
 
-        # the current population
-        pop = self.pop
+    def _sorting(self, pop, *args, n_survive=None, **kwargs):
+        # get the objective space values and objects
+        F = pop.get("F").astype(float, copy=False)
 
-        # merge the offsprings with the current population
-        if infills is not None:
-            pop = Population.merge(self.pop, infills)
+        # the final indices of surviving individuals
+        sorted = []
 
-        # execute the survival to find the fittest solutions
-        self.pop = self.survival.do(self.problem, pop, n_survive=self.pop_size, algorithm=self, **kwargs)
+        # do the non-dominated sorting until splitting front
+        fronts = fast_non_dominated_sort(F)
 
+        for k, front in enumerate(fronts):
 
+            # calculate the crowding distance of the front
+            crowding_of_front = calc_crowding_distance(F[front, :])
 
+            # save rank and crowding in the individual class
+            for j, i in enumerate(front):
+                pop[i].set("rank", k)
+                pop[i].set("crowding", crowding_of_front[j])
+
+            # current front sorted by crowding distance if splitting
+            if len(sorted) + len(front) > n_survive:
+                I = randomized_argsort(crowding_of_front, order='descending', method='numpy')
+                I = I[:(n_survive - len(sorted))]
+
+            # otherwise take the whole front unsorted
+            else:
+                I = np.arange(len(front))
+
+        pop.F = sorted
 
 def calc_crowding_distance(F, filter_out_duplicates=True):
     n_points, n_obj = F.shape
