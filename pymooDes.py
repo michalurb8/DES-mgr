@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
 from pymoo.core.duplicate import DefaultDuplicateElimination, NoDuplicateElimination
 from pymoo.core.algorithm import Algorithm
@@ -40,6 +41,7 @@ class DES(Algorithm):
         self._mean_next = None
         self._delta = None
         self._path = None
+        self.shown = False #TODO
 
         # other run specific data updated whenever solve is called - to share them in all algorithms
         self.n_gen = None
@@ -71,13 +73,13 @@ class DES(Algorithm):
 
 
         # self.termination = DefaultMultiObjectiveTermination()
-        self.termination = get_termination("n_eval", 500)
+        self.termination = get_termination("n_eval", 1000)
 
-    def _set_optimum(self, **kwargs):
-        if not has_feasible(self.pop):
-            self.opt = self.pop[[np.argmin(self.pop.get("CV"))]]
-        else:
-            self.opt = self.pop[self.pop.get("rank") == 0]
+    # def _set_optimum(self, **kwargs):
+    #     if not has_feasible(self.pop):
+    #         self.opt = self.pop[[np.argmin(self.pop.get("CV"))]]
+    #     else:
+    #         self.opt = self.pop[self.pop.get("rank") == 0]
     
     def _setup(self, problem, **kwargs):
         N = problem.n_var
@@ -157,6 +159,18 @@ class DES(Algorithm):
             new_position = self._mean_next + difference        
 
             off.append(new_position)
+
+        if not self.shown:
+            plt.show()
+            plt.ioff()
+            self.shown = True
+        plt.cla()
+        plt.clf()
+        plt.axvline(0)
+        plt.axhline(0)
+        for i in off:
+            plt.scatter(i[0], i[1])
+        plt.pause(0.2)
 
         pop = Population.new("X", off)
         # print(pop)
