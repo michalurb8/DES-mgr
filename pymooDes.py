@@ -47,7 +47,6 @@ class DES(Algorithm):
         self.n_gen = None
         self.N = None
         self.pop = None
-        self.off = None
 
         self.param_archive = []
 
@@ -71,9 +70,8 @@ class DES(Algorithm):
                                              repair=self.repair,
                                              eliminate_duplicates=self.eliminate_duplicates)
 
-
         # self.termination = DefaultMultiObjectiveTermination()
-        self.termination = get_termination("n_eval", 1000)
+        self.termination = get_termination("n_iter", 500)
 
     # def _set_optimum(self, **kwargs):
     #     if not has_feasible(self.pop):
@@ -84,16 +82,16 @@ class DES(Algorithm):
     def _setup(self, problem, **kwargs):
         N = problem.n_var
 
-        self.pop_size = 4*N
+        self.pop_size = 20 #4*N
         self.n_offsprings = self.pop_size
         self.N = N
 
         self._mu = self.pop_size // 2
         self._EPS = 10**-6
-        self._CC = np.power(N, -0.5)
+        self._CC = 1/(2*np.sqrt(N))
         self._CD = self._mu/(self._mu + 2)
         self._CE = 2/(N*N)
-        self._H = 6 + 3*np.sqrt(N)
+        self._H = 1 #6 + 3*np.sqrt(N)
         self._mean_curr = None
         self._mean_next = None
         self._delta = None
@@ -131,6 +129,27 @@ class DES(Algorithm):
         sort_criteria = [lambda ind: ind.get('rank'), lambda ind: ind.get('crowding')*-1]
         I = np.lexsort([criterium(self.pop) for criterium in reversed(sort_criteria)])
         self.pop[:] = self.pop[I]
+
+        if not self.shown:
+            plt.show()
+            plt.ioff()
+            plt.axvline(0)
+            plt.axhline(0)
+            self.shown = True
+        else:
+            plt.cla()
+            plt.clf()
+            plt.xlim(-1000, 1000)
+            plt.ylim(-1000, 1000)
+            for i in self.pop:
+                r = i.get('rank')
+                if not r: r = 1
+                plt.scatter(i.X[0], i.X[1], c='blue', s=r*10)
+            plt.scatter(self._mean_curr[0], self._mean_curr[1], c='red')
+            plt.scatter(self._mean_next[0], self._mean_next[1], c='yellow')
+            plt.plot([self._mean_curr[0], self._mean_next[0]], [self._mean_curr[1], self._mean_next[1]])
+            plt.pause(0.01)
+
         return Population.create(*self.pop[:self._mu])
 
     def _infill(self):
@@ -144,44 +163,29 @@ class DES(Algorithm):
         self._delta = self._mean_next - self._mean_curr
         self._path = (1-self._CC) * self._path + np.sqrt(self._mu * self._CC * (2 - self._CC)) if self._path is not None else self._delta
 
-        self.param_archive.append((self.pop, self._delta, self._path))
+        self.param_archive.append((parents, self._delta, self._path))
 
         off = []
         for _ in range(self.pop_size):
             horizon = min(len(self.param_archive), self._H)
             point_index, delta_index, path_index = np.random.randint(0, horizon, size=3)
-            point1, point2 = np.random.randint(0, self.pop_size-1, size=2)
+            point1, point2 = np.random.randint(0, self._mu-1, size=2)
             difference = np.sqrt(self._CD/2) * (self.param_archive[-point_index][0][point1].get("X") - self.param_archive[-point_index][0][point2].get("X"))
             difference += np.sqrt(self._CD) * np.random.normal() * self.param_archive[-delta_index][1]
             difference += np.sqrt(1-self._CD) * np.random.normal() * self.param_archive[-path_index][2]
             difference += self._EPS * np.sqrt(1-self._CE)**(self.n_gen/2) * np.random.multivariate_normal(np.zeros(self.N), np.eye(self.N))
 
-            new_position = self._mean_next + difference        
+            new_position = self._mean_next + difference / 2
 
             off.append(new_position)
 
-        if not self.shown:
-            plt.show()
-            plt.ioff()
-            self.shown = True
-        plt.cla()
-        plt.clf()
-        plt.axvline(0)
-        plt.axhline(0)
-        for i in off:
-            plt.scatter(i[0], i[1])
-        plt.pause(0.2)
-
         pop = Population.new("X", off)
-        # print(pop)
-        # for p in pop:
-        #     print(p.get('X'))
-        # print(pop.get('X'))
-        # exit()
+
         return pop
 
     def _advance(self, infills=None, **kwargs):
         # just set the new population as the newly generated individuals
+
         self.pop = infills
 
 def get_mean(pop: Population):
