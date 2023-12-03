@@ -3,6 +3,7 @@ from pymoo.core.problem import ElementwiseProblem
 from pymooDes import DES
 from pymoo.optimize import minimize
 from pymoo.core.repair import Repair
+from pymoo.core.repair import NoRepair
 
 class MyProblem(ElementwiseProblem):
 
@@ -10,12 +11,12 @@ class MyProblem(ElementwiseProblem):
         super().__init__(n_var=2,
                          n_obj=2,
                          n_ieq_constr=0,
-                         xl=np.array([-500,-500]),
-                         xu=np.array([500,500]))
+                         xl=-10,
+                         xu=10)
 
     def _evaluate(self, x, out, *args, **kwargs):
         f1 = (x[0]**2 + x[1]**2)
-        f2 = ((x[0]-100)**2 + x[1]**2)
+        f2 = ((x[0]-1)**2 + x[1]**2)
 
         # g1 = 2*(x[0]-0.1) * (x[0]-0.9) / 0.18
         # g2 = - 20*(x[0]-0.4) * (x[0]-0.6) / 4.8
@@ -26,7 +27,7 @@ class MyProblem(ElementwiseProblem):
 
 
 problem = MyProblem()
-alg = DES(repair = Repair())
+alg = DES(visuals=True)
 
 res = minimize(problem, alg, save_history=False)
 

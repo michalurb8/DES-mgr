@@ -8,12 +8,13 @@ from pymoo.core.initialization import Initialization
 from pymoo.util.misc import find_duplicates, has_feasible
 from pymoo.operators.sampling.rnd import FloatRandomSampling
 from pymoo.core.population import Population
-from pymoo.core.individual import Individual
 
 from pymoo.util.nds.fast_non_dominated_sort import fast_non_dominated_sort
 from pymoo.termination.default import DefaultMultiObjectiveTermination
 
 from pymoo.termination import get_termination
+
+_DELAY = 5
 
 # =========================================================================================================
 # Implementation
@@ -24,7 +25,8 @@ class DES(Algorithm):
     def __init__(self,
                  sampling=FloatRandomSampling(),
                  eliminate_duplicates=DefaultDuplicateElimination(),
-                 repair=None,
+                 repair=NoRepair(),
+                 visuals=False,
                  **kwargs
                  ):
 
@@ -41,7 +43,8 @@ class DES(Algorithm):
         self._mean_next = None
         self._delta = None
         self._path = None
-        self.shown = False #TODO
+        self.visuals = visuals
+        self.visuals_started = False #TODO
 
         # other run specific data updated whenever solve is called - to share them in all algorithms
         self.n_gen = None
@@ -66,6 +69,8 @@ class DES(Algorithm):
         # simply set the no repair object if it is None
         self.repair = repair if repair is not None else NoRepair()
 
+
+        # sampling = np.array([[1, 8], [2, 3], [3, 4], [4, 5], [5, 6]]) #debug
         self.initialization = Initialization(sampling,
                                              repair=self.repair,
                                              eliminate_duplicates=self.eliminate_duplicates)
@@ -82,7 +87,7 @@ class DES(Algorithm):
     def _setup(self, problem, **kwargs):
         N = problem.n_var
 
-        self.pop_size = 20 #4*N
+        self.pop_size = 10 #4*N
         self.n_offsprings = self.pop_size
         self.N = N
 
@@ -91,7 +96,7 @@ class DES(Algorithm):
         self._CC = 1/(2*np.sqrt(N))
         self._CD = self._mu/(self._mu + 2)
         self._CE = 2/(N*N)
-        self._H = 1 #6 + 3*np.sqrt(N)
+        self._H = 6 + 3*np.sqrt(N)
         self._mean_curr = None
         self._mean_next = None
         self._delta = None
@@ -116,6 +121,7 @@ class DES(Algorithm):
 
         # do the non-dominated sorting until splitting front
         fronts = fast_non_dominated_sort(F)
+
         for k, front in enumerate(fronts):
 
             # calculate the crowding distance of the front
@@ -130,34 +136,44 @@ class DES(Algorithm):
         I = np.lexsort([criterium(self.pop) for criterium in reversed(sort_criteria)])
         self.pop[:] = self.pop[I]
 
-        if not self.shown:
-            plt.show()
-            plt.ioff()
-            plt.axvline(0)
-            plt.axhline(0)
-            self.shown = True
-        else:
-            plt.cla()
-            plt.clf()
-            plt.xlim(-1000, 1000)
-            plt.ylim(-1000, 1000)
-            for i in self.pop:
-                r = i.get('rank')
-                if not r: r = 1
-                plt.scatter(i.X[0], i.X[1], c='blue', s=r*10)
-            plt.scatter(self._mean_curr[0], self._mean_curr[1], c='red')
-            plt.scatter(self._mean_next[0], self._mean_next[1], c='yellow')
-            plt.plot([self._mean_curr[0], self._mean_next[0]], [self._mean_curr[1], self._mean_next[1]])
-            plt.pause(0.01)
+        if self.visuals:
+            if not self.visuals_started:
+                self.visuals_started = True
+                plt.rcParams["figure.figsize"] = (12,7)
+                plt.rcParams['font.size'] = '22'
+                # plt.tight_layout()
+                self._fig, (self._ax1, self._ax2) = plt.subplots(1, 2)
+                self._fig.subplots_adjust(top = 0.8, bottom = 0.1, left = 0.1, right = 0.99)
+            # plt.cla()
+            # plt.clf()
+            # plt.axvline(0)
+            # plt.axhline(0)
+            # plt.xlim(-10, 10)
+            # plt.ylim(-10, 10)
+            # for i in self.pop:
+            #     r = i.get('rank')
+            #     if not r: r = 0
+            #     plt.scatter(i.X[0], i.X[1], c='blue', s=r*20)
+            # plt.scatter(self._mean_curr[0], self._mean_curr[1], c='red')
+            # plt.scatter(self._mean_next[0], self._mean_next[1], c='yellow')
+            self._draw_features()
+            self._draw_values()
+            title = "Iteracja " + str(self.n_gen) + ", \n"
+            title += "Liczebność populacji: " + str(self.pop_size) + ", \n"
+            title += "Wymiarowość: " + str(self.N) + ", \n"
+            self._fig.suptitle(title)
+
+            plt.pause(_DELAY)
 
         return Population.create(*self.pop[:self._mu])
 
     def _infill(self):
-        parents = self._selection()
-
         assert self._mean_next is not None, f"_mean_next empty during infill: {self._mean_next}" #TODO
         self._mean_curr = self._mean_next
         assert self._mean_curr is not None, f"_mean_curr empty during infill: {self._mean_curr}" #TODO
+
+        parents = self._selection()
+
         self._mean_next = get_mean(parents)
 
         self._delta = self._mean_next - self._mean_curr
@@ -187,6 +203,62 @@ class DES(Algorithm):
         # just set the new population as the newly generated individuals
 
         self.pop = infills
+
+    def _draw_features(self):
+        self._ax1.clear()
+        self._ax1.grid(zorder = 1)
+
+        axis_equal = True
+
+        self._ax1.axvline(0, linewidth=4, c='black', zorder = 2)
+        self._ax1.axhline(0, linewidth=4, c='black', zorder = 2)
+
+        for i in self.pop:
+            r = i.get('rank')
+            if not r: r = 1
+            self._ax1.scatter(i.X[0], i.X[1], c='black', s=r*20, zorder = 3)
+
+        self._ax1.scatter(self._mean_curr[0], self._mean_curr[1], s=50, c='yellow', zorder = 4)
+        self._ax1.scatter(self._mean_next[0], self._mean_next[1], s=50, c='red', zorder = 4)
+        self._ax1.plot([self._mean_curr[0], self._mean_next[0]], [self._mean_curr[1], self._mean_next[1]], zorder = 5)
+        print(self.n_gen)
+        print(self._mean_curr)
+        print(self._mean_next)
+        print()
+
+        treshold = 1.1
+
+        if axis_equal:
+            max1 = max([abs(i.X[0]) for i in self.pop])
+            max1 = np.exp(np.ceil(np.log(max1)/treshold)*treshold)
+            max2 = max([abs(i.X[1]) for i in self.pop])
+            max2 = np.exp(np.ceil(np.log(max2)/treshold)*treshold)
+            self._ax1.axis('equal')
+            max1 = max2 = max(max1,max2)
+        else:
+            max1 = 1.2*max([abs(i.X[0]) for i in self.pop])
+            max2 = 1.2*max([abs(i.X[1]) for i in self.pop])
+            self._ax1.axis('auto')
+
+        self._ax1.set_xlim(-max1, max1)
+        self._ax1.set_ylim(-max2, max2)
+
+    def _draw_values(self):
+        self._ax2.clear()
+        self._ax2.grid()
+        x1 = [i.F[0] for i in self.pop]
+        x2 = [i.F[1] for i in self.pop]
+
+        for i in self.pop:
+            r = i.get('rank')
+            if not r: r = 0
+            self._ax2.scatter(i.F[0], i.F[1], c=['purple', 'blue', 'green', 'yellow', 'orange', 'red'][r%6], s=20, zorder = 3)
+
+        rang1 = max(x1) - min(x1) if max(x1) - min(x1) > self._EPS else 0.001
+        rang2 = max(x2) - min(x2) if max(x2) - min(x2) > self._EPS else 0.001
+        self._ax2.axis('auto')
+        self._ax2.set_xlim(min(x1) - rang1/5, max(x1) + rang1/5)
+        self._ax2.set_ylim(min(x2) - rang2/5, max(x2) + rang2/5)
 
 def get_mean(pop: Population):
     return np.mean([ind.get('X') for ind in pop], axis=0)
