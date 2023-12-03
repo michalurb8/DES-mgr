@@ -14,7 +14,7 @@ from pymoo.termination.default import DefaultMultiObjectiveTermination
 
 from pymoo.termination import get_termination
 
-_DELAY = 5
+_DELAY = 0.05
 
 # =========================================================================================================
 # Implementation
@@ -69,8 +69,6 @@ class DES(Algorithm):
         # simply set the no repair object if it is None
         self.repair = repair if repair is not None else NoRepair()
 
-
-        # sampling = np.array([[1, 8], [2, 3], [3, 4], [4, 5], [5, 6]]) #debug
         self.initialization = Initialization(sampling,
                                              repair=self.repair,
                                              eliminate_duplicates=self.eliminate_duplicates)
@@ -87,7 +85,7 @@ class DES(Algorithm):
     def _setup(self, problem, **kwargs):
         N = problem.n_var
 
-        self.pop_size = 10 #4*N
+        self.pop_size = 4*N
         self.n_offsprings = self.pop_size
         self.N = N
 
@@ -111,7 +109,7 @@ class DES(Algorithm):
         return pop
 
     def _initialize_advance(self, infills=None, **kwargs):
-        self._mean_next = get_mean(infills)
+        self._mean_next = get_mean(self.pop)
         self._delta = None
         self._path = None
 
@@ -136,6 +134,39 @@ class DES(Algorithm):
         I = np.lexsort([criterium(self.pop) for criterium in reversed(sort_criteria)])
         self.pop[:] = self.pop[I]
 
+
+        return Population.create(*self.pop[:self._mu])
+
+    def _infill(self):
+        assert self._mean_next is not None, f"_mean_next empty during infill: {self._mean_next}"
+        self._mean_curr = self._mean_next
+        assert self._mean_curr is not None, f"_mean_curr empty during infill: {self._mean_curr}"
+
+        parents = self._selection()
+
+        self._mean_next = get_mean(parents)
+
+        self._delta = self._mean_next - self._mean_curr
+        self._path = (1-self._CC) * self._path + np.sqrt(self._mu * self._CC * (2 - self._CC)) * self._delta if self._path is not None else self._delta
+
+        self.param_archive.append((parents, self._delta, self._path))
+
+        off = []
+        for _ in range(self.pop_size):
+            horizon = min(len(self.param_archive), self._H)
+            point_index, delta_index, path_index = np.random.randint(0, horizon, size=3) + 1
+            point1, point2 = np.random.randint(0, self._mu, size=2)
+            difference = np.sqrt(self._CD/2) * (self.param_archive[-point_index][0][point1].get("X") - self.param_archive[-point_index][0][point2].get("X"))
+            difference += np.sqrt(self._CD) * np.random.normal() * self.param_archive[-delta_index][1]
+            difference += np.sqrt(1-self._CD) * np.random.normal() * self.param_archive[-path_index][2]
+            difference += self._EPS * np.sqrt(1-self._CE)**(self.n_gen/2) * np.random.multivariate_normal(np.zeros(self.N), np.eye(self.N))
+
+            new_position = self._mean_next + difference
+
+            off.append(new_position)
+
+        pop = Population.new("X", off)
+
         if self.visuals:
             if not self.visuals_started:
                 self.visuals_started = True
@@ -144,18 +175,6 @@ class DES(Algorithm):
                 # plt.tight_layout()
                 self._fig, (self._ax1, self._ax2) = plt.subplots(1, 2)
                 self._fig.subplots_adjust(top = 0.8, bottom = 0.1, left = 0.1, right = 0.99)
-            # plt.cla()
-            # plt.clf()
-            # plt.axvline(0)
-            # plt.axhline(0)
-            # plt.xlim(-10, 10)
-            # plt.ylim(-10, 10)
-            # for i in self.pop:
-            #     r = i.get('rank')
-            #     if not r: r = 0
-            #     plt.scatter(i.X[0], i.X[1], c='blue', s=r*20)
-            # plt.scatter(self._mean_curr[0], self._mean_curr[1], c='red')
-            # plt.scatter(self._mean_next[0], self._mean_next[1], c='yellow')
             self._draw_features()
             self._draw_values()
             title = "Iteracja " + str(self.n_gen) + ", \n"
@@ -165,43 +184,10 @@ class DES(Algorithm):
 
             plt.pause(_DELAY)
 
-        return Population.create(*self.pop[:self._mu])
-
-    def _infill(self):
-        assert self._mean_next is not None, f"_mean_next empty during infill: {self._mean_next}" #TODO
-        self._mean_curr = self._mean_next
-        assert self._mean_curr is not None, f"_mean_curr empty during infill: {self._mean_curr}" #TODO
-
-        parents = self._selection()
-
-        self._mean_next = get_mean(parents)
-
-        self._delta = self._mean_next - self._mean_curr
-        self._path = (1-self._CC) * self._path + np.sqrt(self._mu * self._CC * (2 - self._CC)) if self._path is not None else self._delta
-
-        self.param_archive.append((parents, self._delta, self._path))
-
-        off = []
-        for _ in range(self.pop_size):
-            horizon = min(len(self.param_archive), self._H)
-            point_index, delta_index, path_index = np.random.randint(0, horizon, size=3)
-            point1, point2 = np.random.randint(0, self._mu-1, size=2)
-            difference = np.sqrt(self._CD/2) * (self.param_archive[-point_index][0][point1].get("X") - self.param_archive[-point_index][0][point2].get("X"))
-            difference += np.sqrt(self._CD) * np.random.normal() * self.param_archive[-delta_index][1]
-            difference += np.sqrt(1-self._CD) * np.random.normal() * self.param_archive[-path_index][2]
-            difference += self._EPS * np.sqrt(1-self._CE)**(self.n_gen/2) * np.random.multivariate_normal(np.zeros(self.N), np.eye(self.N))
-
-            new_position = self._mean_next + difference / 2
-
-            off.append(new_position)
-
-        pop = Population.new("X", off)
-
         return pop
 
     def _advance(self, infills=None, **kwargs):
         # just set the new population as the newly generated individuals
-
         self.pop = infills
 
     def _draw_features(self):
@@ -219,12 +205,8 @@ class DES(Algorithm):
             self._ax1.scatter(i.X[0], i.X[1], c='black', s=r*20, zorder = 3)
 
         self._ax1.scatter(self._mean_curr[0], self._mean_curr[1], s=50, c='yellow', zorder = 4)
-        self._ax1.scatter(self._mean_next[0], self._mean_next[1], s=50, c='red', zorder = 4)
+        self._ax1.scatter(self._mean_next[0], self._mean_next[1], s=20, c='red', zorder = 5)
         self._ax1.plot([self._mean_curr[0], self._mean_next[0]], [self._mean_curr[1], self._mean_next[1]], zorder = 5)
-        print(self.n_gen)
-        print(self._mean_curr)
-        print(self._mean_next)
-        print()
 
         treshold = 1.1
 

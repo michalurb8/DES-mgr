@@ -4,33 +4,47 @@ from pymooDes import DES
 from pymoo.optimize import minimize
 from pymoo.core.repair import Repair
 from pymoo.core.repair import NoRepair
+import argparse
+from pymoo.termination import get_termination
 
-class MyProblem(ElementwiseProblem):
+parser = argparse.ArgumentParser(prog="DES",
+                                 description='This program allows you to run DES for multi-objective optimization')
 
-    def __init__(self):
-        super().__init__(n_var=2,
-                         n_obj=2,
-                         n_ieq_constr=0,
-                         xl=-10,
-                         xu=10)
+parser.add_argument('-s', '--stop', type=int, default=150,
+                    help='Termination criterium.')
 
-    def _evaluate(self, x, out, *args, **kwargs):
-        f1 = (x[0]**2 + x[1]**2)
-        f2 = ((x[0]-1)**2 + x[1]**2)
+parser.add_argument('-d', '--dimensions', type=int, default=2,
+                    help='Number of dimensions.')
 
-        # g1 = 2*(x[0]-0.1) * (x[0]-0.9) / 0.18
-        # g2 = - 20*(x[0]-0.4) * (x[0]-0.6) / 4.8
-
-        out["F"] = [f1, f2]
-        # out["G"] = [g1, g2]
-        out["G"] = []
+parser.add_argument('-v', '--vis', default=True,
+                    help='Turn off visualisation.', action='store_false')
 
 
-problem = MyProblem()
-alg = DES(visuals=True)
 
-res = minimize(problem, alg, save_history=False)
+if __name__ == "__main__":
+    args = parser.parse_args()
 
-X = res.X
-print(X)
-F = res.F
+    class MyProblem(ElementwiseProblem):
+
+        def __init__(self):
+            super().__init__(n_var=args.dimensions,
+                            n_obj=2,
+                            n_ieq_constr=0,
+                            xl=-10,
+                            xu=10)
+
+        def _evaluate(self, x, out, *args, **kwargs):
+            f1 = sum([xi**2 for xi in x[1:]]) + (x[0] - 1) ** 2
+            f2 = sum([xi**2 for xi in x[1:]]) + (x[0] + 1) ** 2
+
+            out["F"] = [f1, f2]
+            out["G"] = []
+
+    problem = MyProblem()
+    alg = DES(visuals=args.vis)
+
+    res = minimize(problem, alg, termination=get_termination("n_iter", args.stop), save_history=False)
+
+    X = res.X
+    print(X)
+    F = res.F
