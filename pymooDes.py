@@ -85,7 +85,7 @@ class DES(Algorithm):
     def _setup(self, problem, **kwargs):
         N = problem.n_var
 
-        self.pop_size = 4*N
+        self.pop_size = 100 #4*N
         self.n_offsprings = self.pop_size
         self.N = N
 
@@ -236,8 +236,9 @@ class DES(Algorithm):
             if not r: r = 0
             self._ax2.scatter(i.F[0], i.F[1], c=['purple', 'blue', 'green', 'yellow', 'orange', 'red'][r%6], s=20, zorder = 3)
 
-        rang1 = max(x1) - min(x1) if max(x1) - min(x1) > self._EPS else 0.001
-        rang2 = max(x2) - min(x2) if max(x2) - min(x2) > self._EPS else 0.001
+        rang1 = max(x1) - min(x1) if max(x1) - min(x1) > self._EPS else 0.002
+        rang2 = max(x2) - min(x2) if max(x2) - min(x2) > self._EPS else 0.002
+
         self._ax2.axis('auto')
         self._ax2.set_xlim(min(x1) - rang1/5, max(x1) + rang1/5)
         self._ax2.set_ylim(min(x2) - rang2/5, max(x2) + rang2/5)
