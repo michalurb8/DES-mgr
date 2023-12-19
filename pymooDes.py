@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 
 from pymoo.core.duplicate import DefaultDuplicateElimination, NoDuplicateElimination
 from pymoo.core.algorithm import Algorithm
-from pymoo.core.repair import NoRepair
+from pymoo.core.repair import NoRepair, Repair
 from pymoo.core.initialization import Initialization
 from pymoo.util.misc import find_duplicates, has_feasible
 from pymoo.operators.sampling.rnd import FloatRandomSampling
@@ -20,12 +20,25 @@ _DELAY = 0.05
 # Implementation
 # =========================================================================================================
 
+class ReflectionRepair(Repair):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def _do(self, problem, X, **kwargs):
+        for Xi in X:
+            for j in range(len(Xi)):
+                while Xi[j] < problem.xl[j]:
+                    Xi[j] = 2*problem.xl[j] - Xi[j]
+                while Xi[j] > problem.xu[j]:
+                    Xi[j] = 2*problem.xu[j] - Xi[j]
+        return X
+
 class DES(Algorithm):
 
     def __init__(self,
                  sampling=FloatRandomSampling(),
                  eliminate_duplicates=DefaultDuplicateElimination(),
-                 repair=NoRepair(),
+                 repair=ReflectionRepair(),
                  visuals=False,
                  **kwargs
                  ):
@@ -52,6 +65,7 @@ class DES(Algorithm):
         self.pop = None
 
         self.param_archive = []
+        self.point_archive = None
 
         # Algorithm class parameters (filled during _setup()):
         self.pop_size = None
@@ -67,7 +81,7 @@ class DES(Algorithm):
             self.eliminate_duplicates = eliminate_duplicates
 
         # simply set the no repair object if it is None
-        self.repair = repair if repair is not None else NoRepair()
+        self.repair = repair if repair is not None else ReflectionRepair()
 
         self.initialization = Initialization(sampling,
                                              repair=self.repair,
@@ -76,16 +90,13 @@ class DES(Algorithm):
         # self.termination = DefaultMultiObjectiveTermination()
         self.termination = get_termination("n_iter", 500)
 
-    # def _set_optimum(self, **kwargs):
-    #     if not has_feasible(self.pop):
-    #         self.opt = self.pop[[np.argmin(self.pop.get("CV"))]]
-    #     else:
-    #         self.opt = self.pop[self.pop.get("rank") == 0]
+    def _set_optimum(self, **kwargs):
+        self.opt = self.point_archive
     
     def _setup(self, problem, **kwargs):
         N = problem.n_var
 
-        self.pop_size = 100 #4*N
+        self.pop_size = 4*N
         self.n_offsprings = self.pop_size
         self.N = N
 
@@ -101,6 +112,8 @@ class DES(Algorithm):
         self._path = None
 
         self.param_archive = []
+        self.point_archive = None
+        self.archive_size = 100
 
         return self
 
@@ -113,7 +126,30 @@ class DES(Algorithm):
         self._delta = None
         self._path = None
 
-    def _selection(self):
+    def _survival(self) -> Population:
+        # get the objective space values and objects
+        F = self.point_archive.get("F").astype(float, copy=False)
+
+        # do the non-dominated sorting until splitting front
+        fronts = fast_non_dominated_sort(F)
+
+        for k, front in enumerate(fronts):
+
+            # calculate the crowding distance of the front
+            crowding_of_front = calc_crowding_distance(F[front, :])
+
+            # save rank and crowding in the individual class
+            for j, i in enumerate(front):
+                self.point_archive[i].set("rank", k)
+                self.point_archive[i].set("crowding", crowding_of_front[j])
+        
+        sort_criteria = [lambda ind: ind.get('rank'), lambda ind: ind.get('crowding')*-1]
+        I = np.lexsort([criterium(self.point_archive) for criterium in reversed(sort_criteria)])
+        self.point_archive[:] = self.point_archive[I]
+
+        return Population.create(*self.point_archive[:self.archive_size])
+
+    def _selection(self) -> Population:
         # get the objective space values and objects
         F = self.pop.get("F").astype(float, copy=False)
 
@@ -166,8 +202,9 @@ class DES(Algorithm):
             off.append(new_position)
 
         pop = Population.new("X", off)
+        pop = self.repair.do(self.problem, pop)
 
-        if self.visuals:
+        if self.visuals and not self.n_gen % 10:
             if not self.visuals_started:
                 self.visuals_started = True
                 plt.rcParams["figure.figsize"] = (12,7)
@@ -187,14 +224,17 @@ class DES(Algorithm):
         return pop
 
     def _advance(self, infills=None, **kwargs):
-        # just set the new population as the newly generated individuals
+        if self.point_archive is None:
+            self.point_archive = Population.merge(Population(), self.pop)
+        else:
+            self.point_archive = Population.merge(self.point_archive, self.pop)
+            self.point_archive = self._survival()
+
         self.pop = infills
 
     def _draw_features(self):
         self._ax1.clear()
         self._ax1.grid(zorder = 1)
-
-        axis_equal = True
 
         self._ax1.axvline(0, linewidth=4, c='black', zorder = 2)
         self._ax1.axhline(0, linewidth=4, c='black', zorder = 2)
@@ -208,19 +248,24 @@ class DES(Algorithm):
         self._ax1.scatter(self._mean_next[0], self._mean_next[1], s=20, c='red', zorder = 5)
         self._ax1.plot([self._mean_curr[0], self._mean_next[0]], [self._mean_curr[1], self._mean_next[1]], zorder = 5)
 
+        axis_equal = True
         treshold = 1.1
+        max1 = max2 = float('inf')
 
-        if axis_equal:
-            max1 = max([abs(i.X[0]) for i in self.pop])
-            max1 = np.exp(np.ceil(np.log(max1)/treshold)*treshold)
-            max2 = max([abs(i.X[1]) for i in self.pop])
-            max2 = np.exp(np.ceil(np.log(max2)/treshold)*treshold)
-            self._ax1.axis('equal')
-            max1 = max2 = max(max1,max2)
-        else:
-            max1 = 1.2*max([abs(i.X[0]) for i in self.pop])
-            max2 = 1.2*max([abs(i.X[1]) for i in self.pop])
-            self._ax1.axis('auto')
+        # if axis_equal:
+        #     max1 = max([abs(i.X[0]) for i in self.pop])
+        #     max1 = np.exp(np.ceil(np.log(max1)/treshold)*treshold)
+        #     max2 = max([abs(i.X[1]) for i in self.pop])
+        #     max2 = np.exp(np.ceil(np.log(max2)/treshold)*treshold)
+        #     self._ax1.axis('equal')
+        #     max1 = max2 = max(max1,max2)
+        # else:
+        #     max1 = 1.2*max([abs(i.X[0]) for i in self.pop])
+        #     max2 = 1.2*max([abs(i.X[1]) for i in self.pop])
+        #     self._ax1.axis('auto')
+
+        max1 = min(max1, 1.2 * max(self.problem.xl[0], self.problem.xu[0]))
+        max2 = min(max2, 1.2 * max(self.problem.xl[1], self.problem.xu[1]))
 
         self._ax1.set_xlim(-max1, max1)
         self._ax1.set_ylim(-max2, max2)
@@ -231,17 +276,29 @@ class DES(Algorithm):
         x1 = [i.F[0] for i in self.pop]
         x2 = [i.F[1] for i in self.pop]
 
+        for i in self.point_archive:
+            self._ax2.scatter(i.F[0], i.F[1], c='black', s=20, zorder = 3, alpha=0.1)
+
         for i in self.pop:
             r = i.get('rank')
             if not r: r = 0
             self._ax2.scatter(i.F[0], i.F[1], c=['purple', 'blue', 'green', 'yellow', 'orange', 'red'][r%6], s=20, zorder = 3)
 
-        rang1 = max(x1) - min(x1) if max(x1) - min(x1) > self._EPS else 0.002
-        rang2 = max(x2) - min(x2) if max(x2) - min(x2) > self._EPS else 0.002
+        rang = max(max(x1) - min(x1), max(x2) - min(x2))
+        if rang > self._EPS:
+            scale = np.exp(1.3 + np.floor(np.log(rang)))
 
-        self._ax2.axis('auto')
-        self._ax2.set_xlim(min(x1) - rang1/5, max(x1) + rang1/5)
-        self._ax2.set_ylim(min(x2) - rang2/5, max(x2) + rang2/5)
+            min1 = np.floor(min(x1) / scale) - 0.2
+            min2 = np.floor(min(x2) / scale) - 0.2
+
+            max1 = np.ceil(max(x1) / scale) + 0.2
+            max2 = np.ceil(max(x2) / scale) + 0.2
+
+            self._ax2.axis('auto')
+            self._ax2.set_xlim(min1*scale, max1*scale)
+            self._ax2.set_ylim(min2*scale, max2*scale)
+        else:
+            self._ax2.axis('auto')
 
 def get_mean(pop: Population):
     return np.mean([ind.get('X') for ind in pop], axis=0)
