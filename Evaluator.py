@@ -1,13 +1,15 @@
-from des import DES
-from typing import List, Tuple
-import numpy as np
+from pymoo.optimize import minimize
+from pymooDes import DES
 import matplotlib.pyplot as plt
+from pymoo.problems.multi.omnitest import OmniTest
 from sys import stdout
+from pymoo.algorithms.moo.nsga2 import NSGA2
+from pymoo.termination import get_termination
 
 def evaluate(dimensions: int, iterations: int, lambda_arg: int, stop_after: int, visual: bool):
     """
     evaluate() runs the algorithm for multiple iterations
-    Four different MOO metrics are calculated
+    MOO metrics are calculated for DES and NSGA2
     Parameters:
     ----------
     dimensions : int
@@ -23,13 +25,16 @@ def evaluate(dimensions: int, iterations: int, lambda_arg: int, stop_after: int,
     ----------
     """
     history = []
+    p = OmniTest(n_var = dimensions)
     print("Starting evaluation...")
     lambda_prompt = str(lambda_arg) if lambda_arg is not None else "default"
     print(f"dimensions: {dimensions}; iterations: {iterations}; population: {lambda_prompt}")
+    des = DES()
+    nsga = NSGA2()
     for iteration in range(iterations):
         stdout.write(f"\rIteration: {1+iteration} / {iterations}")
         stdout.flush()
-        algo = DES(dimensions, lambda_arg, stop_after, visual)
+        res = minimize(p, des, termination=get_termination("n_iter", stop_after))
         history.append(algo.get_metrics())
     print() #necessary
     values1 = [list(zip(*it_history))[0] for it_history in history]

@@ -10,9 +10,12 @@ from pymoo.operators.sampling.rnd import FloatRandomSampling
 from pymoo.core.population import Population
 
 from pymoo.util.nds.fast_non_dominated_sort import fast_non_dominated_sort
-from pymoo.termination.default import DefaultMultiObjectiveTermination
+
+from pymoo.indicators.gd import GD
+from pymoo.indicators.igd import IGD
 
 from pymoo.termination import get_termination
+from collections import deque
 
 _DELAY = 0.05
 
@@ -40,6 +43,7 @@ class DES(Algorithm):
                  eliminate_duplicates=DefaultDuplicateElimination(),
                  repair=ReflectionRepair(),
                  visuals=False,
+                 pop_size=None,
                  **kwargs
                  ):
 
@@ -57,18 +61,22 @@ class DES(Algorithm):
         self._delta = None
         self._path = None
         self.visuals = visuals
-        self.visuals_started = False #TODO
+        self.visuals_started = False
 
         # other run specific data updated whenever solve is called - to share them in all algorithms
         self.n_gen = None
         self.N = None
         self.pop = None
 
-        self.param_archive = []
+        self.param_archive = deque()
         self.point_archive = None
+        self.metric_archive = []
 
         # Algorithm class parameters (filled during _setup()):
-        self.pop_size = None
+        if pop_size:
+            self.pop_size = pop_size
+        else:
+            self.pop_size = None
         self.n_offsprings = None
 
         # set the duplicate detection class - a boolean value chooses the default duplicate detection
@@ -87,7 +95,6 @@ class DES(Algorithm):
                                              repair=self.repair,
                                              eliminate_duplicates=self.eliminate_duplicates)
 
-        # self.termination = DefaultMultiObjectiveTermination()
         self.termination = get_termination("n_iter", 500)
 
     def _set_optimum(self, **kwargs):
@@ -96,7 +103,8 @@ class DES(Algorithm):
     def _setup(self, problem, **kwargs):
         N = problem.n_var
 
-        self.pop_size = 4*N
+        if not self.pop_size:
+            self.pop_size = 20
         self.n_offsprings = self.pop_size
         self.N = N
 
@@ -111,9 +119,10 @@ class DES(Algorithm):
         self._delta = None
         self._path = None
 
-        self.param_archive = []
+        self.param_archive = deque()
         self.point_archive = None
-        self.archive_size = 100
+        self.archive_size = 300#self.pop_size
+        self.metric_archive = []
 
         return self
 
@@ -186,11 +195,13 @@ class DES(Algorithm):
         self._path = (1-self._CC) * self._path + np.sqrt(self._mu * self._CC * (2 - self._CC)) * self._delta if self._path is not None else self._delta
 
         self.param_archive.append((parents, self._delta, self._path))
+        horizon = len(self.param_archive)
+        if horizon > self._H:
+            self.param_archive.popleft()
 
         off = []
         for _ in range(self.pop_size):
-            horizon = min(len(self.param_archive), self._H)
-            point_index, delta_index, path_index = np.random.randint(0, horizon, size=3) + 1
+            point_index, delta_index, path_index = np.random.randint(0, horizon, size=3)
             point1, point2 = np.random.randint(0, self._mu, size=2)
             difference = np.sqrt(self._CD/2) * (self.param_archive[-point_index][0][point1].get("X") - self.param_archive[-point_index][0][point2].get("X"))
             difference += np.sqrt(self._CD) * np.random.normal() * self.param_archive[-delta_index][1]
@@ -229,6 +240,10 @@ class DES(Algorithm):
         else:
             self.point_archive = Population.merge(self.point_archive, self.pop)
             self.point_archive = self._survival()
+        
+        gd = GD(self.problem.pareto_front())(self.point_archive.get('F'))
+        igd = IGD(self.problem.pareto_front())(self.point_archive.get('F'))
+        self.history.append((self.evaluator.n_eval, gd, igd))
 
         self.pop = infills
 
@@ -267,8 +282,6 @@ class DES(Algorithm):
         max1 = min(max1, 1.2 * max(self.problem.xl[0], self.problem.xu[0]))
         max2 = min(max2, 1.2 * max(self.problem.xl[1], self.problem.xu[1]))
 
-        self._ax1.set_xlim(-max1, max1)
-        self._ax1.set_ylim(-max2, max2)
 
     def _draw_values(self):
         self._ax2.clear()
@@ -295,8 +308,6 @@ class DES(Algorithm):
             max2 = np.ceil(max(x2) / scale) + 0.2
 
             self._ax2.axis('auto')
-            self._ax2.set_xlim(min1*scale, max1*scale)
-            self._ax2.set_ylim(min2*scale, max2*scale)
         else:
             self._ax2.axis('auto')
 
