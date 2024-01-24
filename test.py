@@ -11,16 +11,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 p = get_problem("zdt1")
-p = OmniTest(n_var=3)
+p = OmniTest(n_var=5)
+p = get_problem("dtlz1")
 
-v = True
+v = False
 nsga = NSGA2(visuals=v)
 des4 = DES(visuals=v, pop_size=4)
 des20 = DES(visuals=v, pop_size=20)
 des100 = DES(visuals=v, pop_size=100)
 
-num = 25
-n_eval = 10000
+num = 20
+n_eval = 5000
 
 alld = []
 for i in range(num):
@@ -31,7 +32,7 @@ alld = np.mean(np.array(alld), axis=0)
 
 alln = []
 for i in range(num):
-    resn = minimize(p, des100, termination=get_termination("n_eval", n_eval))
+    resn = minimize(p, nsga, termination=get_termination("n_eval", n_eval))
     values = np.array(resn.history)
     alln.append(values)
 alln = np.mean(np.array(alln), axis=0)

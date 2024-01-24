@@ -13,6 +13,8 @@ from pymoo.util.nds.fast_non_dominated_sort import fast_non_dominated_sort
 
 from pymoo.indicators.gd import GD
 from pymoo.indicators.igd import IGD
+from pymoo.indicators.gd_plus import GDPlus
+from pymoo.indicators.igd_plus import IGDPlus
 
 from pymoo.termination import get_termination
 from collections import deque
@@ -243,7 +245,9 @@ class DES(Algorithm):
         
         gd = GD(self.problem.pareto_front())(self.point_archive.get('F'))
         igd = IGD(self.problem.pareto_front())(self.point_archive.get('F'))
-        self.history.append((self.evaluator.n_eval, gd, igd))
+        gdp = GDPlus(self.problem.pareto_front())(self.point_archive.get('F'))
+        igdp = IGDPlus(self.problem.pareto_front())(self.point_archive.get('F'))
+        self.history.append((self.evaluator.n_eval, gd, igd, gdp, igdp))
 
         self.pop = infills
 
