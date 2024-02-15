@@ -20,8 +20,8 @@ des4 = DES(visuals=v, pop_size=4)
 des20 = DES(visuals=v, pop_size=20)
 des100 = DES(visuals=v, pop_size=100)
 
-num = 20
-n_eval = 5000
+num = 2
+n_eval = 500
 
 alld = []
 for i in range(num):
