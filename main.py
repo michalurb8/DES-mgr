@@ -1,5 +1,5 @@
 import argparse
-from des import DES
+from Evaluator import dimensionality_test
 
 parser = argparse.ArgumentParser(prog="Multi-DES",
                                  description='This program allows you to run DES')
@@ -21,4 +21,4 @@ parser.add_argument('-v', '--vis', default=False,
 
 if __name__ == '__main__':
     args = parser.parse_args()
-    DES(args.dimensions, args.lbd, args.stop, args.vis)
+    dimensionality_test(args.iterations, args.lbd, args.stop)
