@@ -15,6 +15,7 @@ from pymoo.indicators.gd import GD
 from pymoo.indicators.igd import IGD
 from pymoo.indicators.gd_plus import GDPlus
 from pymoo.indicators.igd_plus import IGDPlus
+from pymoo.indicators.hv import HV
 
 from pymoo.termination import get_termination
 from collections import deque
@@ -46,6 +47,7 @@ class DES(Algorithm):
                  repair=ReflectionRepair(),
                  visuals=False,
                  pop_size=None,
+                 archive_size=None,
                  **kwargs
                  ):
 
@@ -70,9 +72,10 @@ class DES(Algorithm):
         self.N = None
         self.pop = None
 
+        self.archive_size = archive_size
+
         self.param_archive = deque()
         self.point_archive = None
-        self.metric_archive = []
 
         # Algorithm class parameters (filled during _setup()):
         if pop_size:
@@ -97,8 +100,6 @@ class DES(Algorithm):
                                              repair=self.repair,
                                              eliminate_duplicates=self.eliminate_duplicates)
 
-        self.termination = get_termination("n_iter", 500)
-
     def _set_optimum(self, **kwargs):
         self.opt = self.point_archive
     
@@ -106,7 +107,7 @@ class DES(Algorithm):
         N = problem.n_var
 
         if not self.pop_size:
-            self.pop_size = 20
+            self.pop_size = 4*N
         self.n_offsprings = self.pop_size
         self.N = N
 
@@ -123,8 +124,8 @@ class DES(Algorithm):
 
         self.param_archive = deque()
         self.point_archive = None
-        self.archive_size = 300#self.pop_size
-        self.metric_archive = []
+        if not self.archive_size:
+            self.archive_size = self.pop_size
 
         return self
 
@@ -247,7 +248,8 @@ class DES(Algorithm):
         igd = IGD(self.problem.pareto_front())(self.point_archive.get('F'))
         gdp = GDPlus(self.problem.pareto_front())(self.point_archive.get('F'))
         igdp = IGDPlus(self.problem.pareto_front())(self.point_archive.get('F'))
-        self.history.append((self.evaluator.n_eval, gd, igd, gdp, igdp))
+        hv = HV([1]*self.problem.n_obj)(self.point_archive.get('F'))
+        self.history.append((self.evaluator.n_eval, gd, igd, gdp, igdp, hv))
 
         self.pop = infills
 
