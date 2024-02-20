@@ -48,7 +48,7 @@ def evaluate(algorithm: Algorithm, problem: Problem, iterations: int, stop_after
     return averaged
 
 def TEST_algo(problem, iterations, stop_after):
-    des = DES(archive_size=100, pop_size = None)
+    des = DES(archive_size=300, pop_size = 20)
     nsga = NSGA2()
 
     values_des = evaluate(des, problem, iterations, stop_after)
@@ -59,16 +59,17 @@ def TEST_algo(problem, iterations, stop_after):
     for axIndex, metricIndex, metric in [('A', 1, 'GD'), ('B', 2, 'IGD'), ('C', 3, 'GD+'), ('D', 4, 'IGD+'), ('E', 5, 'HV')]:
         ax = axes[axIndex]
         ax.set_title(f"Porównanie algorytmów względem metryki {metric}")
-        ax.plot([i[0] for i in values_des], [i[metricIndex] for i in values_des], c='green', label='DES')
+        ax.plot([i[0] for i in values_des], [i[metricIndex] for i in values_des], c='red', label='DES')
         ax.plot([i[0] for i in values_nsga], [i[metricIndex] for i in values_nsga], c='blue', label='NSGA2')
         ax.set_xlabel("Liczba ocenionych punktów")
         ax.set_ylabel(f"Wartość metryki {metric}")
         if metric != 'HV': ax.set_yscale('log')
         ax.grid()
 
-    fig.suptitle(f"Uśrednione wartości metryk dla populacji zwracanej przez algorytmy")
+    fig.suptitle(f"Uśrednione wartości metryk dla populacji zwracanej przez algorytmy", fontsize="20")
     handles, labels = ax.get_legend_handles_labels()
-    fig.legend(handles, labels, loc = 'upper right', title='Algorytm')
+    legend = fig.legend(handles, labels, loc = 'upper right', title='Algorytm', fontsize="16")
+    plt.setp(legend.get_title(),fontsize='24')
     plt.rc('font', family='normal', weight = 'bold', size = 22)
     plt.show()
 
@@ -92,17 +93,18 @@ def archive_test(problem, iterations, stop_after, archive = [10, 50, 100, 200, 4
         if metric != 'HV': ax.set_yscale('log')
         ax.grid()
 
-    fig.suptitle(f"Uśrednione wartości metryk dla populacji zwracanej przez algorytmy")
+    fig.suptitle(f"Uśrednione wartości metryk dla populacji zwracanej przez algorytmy", fontsize='20')
     handles, labels = ax.get_legend_handles_labels()
-    fig.legend(handles, labels, loc = 'upper right', title='Maksymalna liczba punktów w archiwum')
+    legend = fig.legend(handles, labels, loc = 'upper right', title='Maksymalna liczba punktów w archiwum', fontsize='16')
+    plt.setp(legend.get_title(),fontsize='24')
     plt.rc('font', family='normal', weight = 'bold', size = 22)
     plt.show()
 
-def lambda_test(problem, iterations, stop_after, lambdas = [10,20,30,50, 80]):
+def lambda_test(problem, iterations, stop_after, lambdas = [12, 20]):
 
     values = []
     for l in lambdas:
-        des = DES(pop_size = l)#, archive_size=100)
+        des = DES(pop_size = l, archive_size = 300)
         v = evaluate(des, problem, iterations, stop_after)
         values.append(v)
 
@@ -118,16 +120,17 @@ def lambda_test(problem, iterations, stop_after, lambdas = [10,20,30,50, 80]):
         if metric != 'HV': ax.set_yscale('log')
         ax.grid()
 
-    fig.suptitle(f"Uśrednione wartości metryk dla populacji zwracanej przez algorytmy")
+    fig.suptitle(f"Uśrednione wartości metryk dla populacji zwracanej przez algorytmy", fontsize="16")
     handles, labels = ax.get_legend_handles_labels()
-    fig.legend(handles, labels, loc = 'upper right', title='Liczebność populacji')
+    legend = fig.legend(handles, labels, loc = 'upper right', title='Liczebność populacji', fontsize="20")
+    plt.setp(legend.get_title(), fontsize='24')
     plt.rc('font', family='normal', weight = 'bold', size = 22)
     plt.show()
 
 if __name__ == "__main__":
     problem = ZDT1()
     problem = DTLZ1()
-    problem = OmniTest(n_var=5)
-    TEST_algo(problem = problem, iterations = 10, stop_after = 20000)
-    # lambda_test(problem, 10, 1000)
+    problem = OmniTest(n_var=3)
+    # TEST_algo(problem = problem, iterations = 5, stop_after = 7000)
+    lambda_test(problem, 20, 6000, [10, 23, 36, 50])
     # archive_test(problem, 10, 2000, [10, 30, 60, 100])

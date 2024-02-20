@@ -218,7 +218,7 @@ class DES(Algorithm):
         pop = Population.new("X", off)
         pop = self.repair.do(self.problem, pop)
 
-        if self.visuals and not self.n_gen % 10:
+        if self.visuals: # and not self.n_gen % 10:
             if not self.visuals_started:
                 self.visuals_started = True
                 plt.rcParams["figure.figsize"] = (12,7)
@@ -295,8 +295,9 @@ class DES(Algorithm):
         x1 = [i.F[0] for i in self.pop]
         x2 = [i.F[1] for i in self.pop]
 
-        for i in self.point_archive:
-            self._ax2.scatter(i.F[0], i.F[1], c='black', s=20, zorder = 3, alpha=0.1)
+        if self.point_archive is not None:
+            for i in self.point_archive:
+                self._ax2.scatter(i.F[0], i.F[1], c='black', s=20, zorder = 3, alpha=0.1)
 
         for i in self.pop:
             r = i.get('rank')
