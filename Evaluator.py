@@ -48,7 +48,7 @@ def evaluate(algorithm: Algorithm, problem: Problem, iterations: int, stop_after
     return averaged
 
 def TEST_algo(problem, iterations, stop_after):
-    des = DES(archive_size=300, pop_size = 20)
+    des = DES(archive_size=200, pop_size = 20)
     nsga = NSGA2()
 
     values_des = evaluate(des, problem, iterations, stop_after)
@@ -131,6 +131,6 @@ if __name__ == "__main__":
     problem = ZDT1()
     problem = DTLZ1()
     problem = OmniTest(n_var=3)
-    # TEST_algo(problem = problem, iterations = 5, stop_after = 7000)
-    lambda_test(problem, 20, 6000, [10, 23, 36, 50])
+    TEST_algo(problem = problem, iterations = 2, stop_after = 7000)
+    # lambda_test(problem, 20, 6000, [10, 23, 36, 50])
     # archive_test(problem, 10, 2000, [10, 30, 60, 100])
