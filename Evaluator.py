@@ -37,7 +37,7 @@ def evaluate(algorithm: Algorithm, problem: Problem, iterations: int, stop_after
     history = []
     termination = get_termination("n_eval", stop_after)
     print("Starting evaluation...")
-    print(f"dimensions: {problem.n_var}; iterations: {iterations}; population: {algorithm.pop_size if algorithm.pop_size else problem.n_var * 4}")
+    print(f"dimensions: {problem.n_var}; iterations: {iterations}; population: {algorithm.pop_size if algorithm.pop_size else 'default'}")
     for iteration in range(iterations):
         stdout.write(f"\rIteration: {1+iteration} / {iterations}")
         stdout.flush()
@@ -48,7 +48,8 @@ def evaluate(algorithm: Algorithm, problem: Problem, iterations: int, stop_after
     return averaged
 
 def TEST_algo(problem, iterations, stop_after):
-    des = DES(archive_size=200, pop_size = 20)
+    # des = DES(pop_size=20, archive_size=100)
+    des = DES()
     nsga = NSGA2()
 
     values_des = evaluate(des, problem, iterations, stop_after)
@@ -58,26 +59,93 @@ def TEST_algo(problem, iterations, stop_after):
 
     for axIndex, metricIndex, metric in [('A', 1, 'GD'), ('B', 2, 'IGD'), ('C', 3, 'GD+'), ('D', 4, 'IGD+'), ('E', 5, 'HV')]:
         ax = axes[axIndex]
-        ax.set_title(f"Porównanie algorytmów względem metryki {metric}")
+        ax.set_title(f"Porównanie algorytmów względem miary {metric}", fontsize='14')
         ax.plot([i[0] for i in values_des], [i[metricIndex] for i in values_des], c='red', label='DES')
         ax.plot([i[0] for i in values_nsga], [i[metricIndex] for i in values_nsga], c='blue', label='NSGA2')
-        ax.set_xlabel("Liczba ocenionych punktów")
-        ax.set_ylabel(f"Wartość metryki {metric}")
+        ax.set_xlabel("Liczba ocenionych punktów", fontsize='14')
+        ax.set_ylabel(f"Wartość miary {metric}", fontsize='14')
+        ax.tick_params(axis='both', labelsize=15)
         if metric != 'HV': ax.set_yscale('log')
         ax.grid()
 
-    fig.suptitle(f"Uśrednione wartości metryk dla populacji zwracanej przez algorytmy", fontsize="20")
+    fig.suptitle(f"Uśrednione wartości miar dla populacji zwracanej przez algorytmy", fontsize="20")
     handles, labels = ax.get_legend_handles_labels()
     legend = fig.legend(handles, labels, loc = 'upper right', title='Algorytm', fontsize="16")
     plt.setp(legend.get_title(),fontsize='24')
     plt.rc('font', family='normal', weight = 'bold', size = 22)
     plt.show()
 
-def archive_test(problem, iterations, stop_after, archive = [10, 50, 100, 200, 400]):
+def time_test(problem, iterations, stop_after):
+    des = DES(archive_size=12)
+    nsga = NSGA2()
 
+    values_des = evaluate(des, problem, iterations, stop_after)
+    values_nsga = evaluate(nsga, problem, iterations, stop_after)
+
+    fig, ax = plt.subplots()
+
+    ax.set_title(f"Porównanie czasu działania algorytmów", fontsize='14')
+    ax.plot([i[0] for i in values_des], [i[6] for i in values_des], c='red', label='DES')
+    ax.plot([i[0] for i in values_nsga], [i[6] for i in values_nsga], c='blue', label='NSGA2')
+    ax.set_xlabel("Liczba ocenionych punktów", fontsize='14')
+    ax.set_ylabel(f"Czas [ms]", fontsize='14')
+    ax.tick_params(axis='both', labelsize=15)
+    ax.grid()
+
+    fig.suptitle(f"Uśrednione wartości miar dla populacji zwracanej przez algorytmy", fontsize="20")
+    handles, labels = ax.get_legend_handles_labels()
+    legend = fig.legend(handles, labels, loc = 'upper right', title='Algorytm', fontsize="16")
+    plt.setp(legend.get_title(),fontsize='24')
+    plt.rc('font', family='normal', weight = 'bold', size = 22)
+    plt.show()
+
+def single_run(problem, algorithm, iterations, stop_after):
+    v = evaluate(algorithm, problem, iterations, stop_after)
+
+    fig, axes = plt.subplot_mosaic("AB;CD;EE", constrained_layout=True)
+
+    for axIndex, metricIndex, metric in [('A', 1, 'GD'), ('B', 2, 'IGD'), ('C', 3, 'GD+'), ('D', 4, 'IGD+'), ('E', 5, 'HV')]:
+        ax = axes[axIndex]
+        ax.set_title(f"Porównanie względem miary {metric}", fontsize=20)
+        ax.plot([i[0] for i in v], [i[metricIndex] for i in v])
+        ax.set_xlabel("Liczba ocenionych punktów", fontsize=16)
+        ax.set_ylabel(f"Wartość miary {metric}", fontsize=16)
+        if metric != 'HV': ax.set_yscale('log')
+        ax.tick_params(axis='both', labelsize=15)
+        ax.grid()
+
+    fig.suptitle(f"Wartości miar uśrednione z {iterations} przebiegów algorytmu DES", fontsize='24')
+    # plt.rc('font', family='normal', weight = 'bold', size = 22)
+    plt.show()
+
+def archive_time(problem, iterations, stop_after, archive = [50, 100, 200, 400]):
     values = []
     for a in archive:
-        des = DES(pop_size = 20, archive_size=a)
+        des = DES(archive_size=a)
+        v = evaluate(des, problem, iterations, stop_after)
+        values.append(v)
+
+    fig, ax = plt.subplots()
+    for archiveIndex, value in enumerate(values):
+        ax.plot([i[0] for i in value], [i[6] for i in value], label=str(archive[archiveIndex]))
+    ax.set_xlabel("Liczba ocenionych punktów", fontsize='14')
+    ax.set_ylabel(f"Czas [ms]", fontsize='14')
+    ax.tick_params(axis='both', labelsize=15)
+    ax.grid()
+
+    plt.title(f"Porównanie czasu działania jednego pokolenia\nw zależności od liczby obliczeń wartości kryteriów", fontsize='20')
+    handles, labels = ax.get_legend_handles_labels()
+    legend = plt.legend(handles, labels, loc = 'upper left', title='Maksymalna liczba\npunktów w archiwum', fontsize='16')
+    plt.setp(legend.get_title(),fontsize='16')
+    plt.ylim(bottom=0)
+    plt.rc('font', family='normal', weight = 'bold', size = 22)
+    plt.show()
+
+def nvar_test(iterations, stop_after, nvars = [2, 3, 4, 5]):
+    values = []
+    for nvar in nvars:
+        des = DES()
+        problem = OmniTest(n_var=nvar)
         v = evaluate(des, problem, iterations, stop_after)
         values.append(v)
 
@@ -85,18 +153,101 @@ def archive_test(problem, iterations, stop_after, archive = [10, 50, 100, 200, 4
 
     for axIndex, metricIndex, metric in [('A', 1, 'GD'), ('B', 2, 'IGD'), ('C', 3, 'GD+'), ('D', 4, 'IGD+'), ('E', 5, 'HV')]:
         ax = axes[axIndex]
-        ax.set_title(f"Porównanie algorytmów względem metryki {metric}")
-        for archiveIndex, value in enumerate(values):
-            ax.plot([i[0] for i in value], [i[metricIndex] for i in value], label=str(archive[archiveIndex]))
-        ax.set_xlabel("Liczba ocenionych punktów")
-        ax.set_ylabel(f"Wartość metryki {metric}")
+        ax.set_title(f"Porównanie względem miary {metric}")
+        for nvarIndex, value in enumerate(values):
+            ax.plot([i[0] for i in value], [i[metricIndex] for i in value], label=str(nvars[nvarIndex]))
+        ax.set_xlabel("Liczba ocenionych punktów", fontsize=12)
+        ax.set_ylabel(f"Wartość miary {metric}", fontsize=12)
         if metric != 'HV': ax.set_yscale('log')
+        ax.tick_params(axis='both', labelsize=15)
         ax.grid()
 
-    fig.suptitle(f"Uśrednione wartości metryk dla populacji zwracanej przez algorytmy", fontsize='20')
+    fig.suptitle(f"Zależność między wartościami miar a liczbą zmiennych decyzyjnych\ndla algorytmu DES, zadania optymalizacji OmniTest", fontsize='20')
     handles, labels = ax.get_legend_handles_labels()
-    legend = fig.legend(handles, labels, loc = 'upper right', title='Maksymalna liczba punktów w archiwum', fontsize='16')
-    plt.setp(legend.get_title(),fontsize='24')
+    legend = axes['B'].legend(handles, labels, loc = 'upper right', title='Liczba\nzmiennych\ndecyzyjnych', fontsize='14')
+    plt.setp(legend.get_title(),fontsize='16')
+    plt.rc('font', family='normal', weight = 'bold', size = 22)
+    plt.show()
+
+def add_mean_test(problem, iterations, stop_after):
+    values = []
+    for add_mean in [False, True]:
+        des = DES(add_mean=add_mean)
+        v = evaluate(des, problem, iterations, stop_after)
+        values.append(v)
+
+    fig, axes = plt.subplot_mosaic("AB;CD;EE", constrained_layout=True)
+
+    for axIndex, metricIndex, metric in [('A', 1, 'GD'), ('B', 2, 'IGD'), ('C', 3, 'GD+'), ('D', 4, 'IGD+'), ('E', 5, 'HV')]:
+        ax = axes[axIndex]
+        ax.set_title(f"Porównanie względem miary {metric}")
+        for addIndex, value in enumerate(values):
+            ax.plot([i[0] for i in value], [i[metricIndex] for i in value], label=("Wyłączone" if addIndex else "Włączone"))
+        ax.set_xlabel("Liczba ocenionych punktów", fontsize=12)
+        ax.set_ylabel(f"Wartość miary {metric}", fontsize=12)
+        if metric != 'HV': ax.set_yscale('log')
+        ax.tick_params(axis='both', labelsize=15)
+        ax.grid()
+
+    fig.suptitle(f"Wpływ oceny punktu środkowego na działanie algorytmu DES", fontsize='20')
+    handles, labels = ax.get_legend_handles_labels()
+    legend = axes['E'].legend(handles, labels, loc = 'lower right', title='Uwzględnianie punktu\nśrodkowego populacji', fontsize='14')
+    plt.setp(legend.get_title(),fontsize='16')
+    plt.rc('font', family='normal', weight = 'bold', size = 22)
+    plt.show()
+
+def crowding_test(problem, iterations, stop_after):
+    values = []
+    for crowding in [False, True]:
+        des = DES(ignore_crowding=crowding)
+        v = evaluate(des, problem, iterations, stop_after)
+        values.append(v)
+
+    fig, axes = plt.subplot_mosaic("AB;CD;EE", constrained_layout=True)
+
+    for axIndex, metricIndex, metric in [('A', 1, 'GD'), ('B', 2, 'IGD'), ('C', 3, 'GD+'), ('D', 4, 'IGD+'), ('E', 5, 'HV')]:
+        ax = axes[axIndex]
+        ax.set_title(f"Porównanie względem miary {metric}")
+        for ignoreIndex, value in enumerate(values):
+            ax.plot([i[0] for i in value], [i[metricIndex] for i in value], label=("Wyłączone" if ignoreIndex else "Włączone"))
+        ax.set_xlabel("Liczba ocenionych punktów", fontsize=12)
+        ax.set_ylabel(f"Wartość miary {metric}", fontsize=12)
+        if metric != 'HV': ax.set_yscale('log')
+        ax.tick_params(axis='both', labelsize=15)
+        ax.grid()
+
+    fig.suptitle(f"Wpływ współczynnika grupowania na działanie algorytmu DES", fontsize='20')
+    handles, labels = ax.get_legend_handles_labels()
+    legend = axes['E'].legend(handles, labels, loc = 'lower right', title='Sortowanie populacji po wartości\nwspółczynnika grupowania', fontsize='14')
+    plt.setp(legend.get_title(),fontsize='16')
+    plt.rc('font', family='normal', weight = 'bold', size = 22)
+    plt.show()
+
+def archive_test(iterations, stop_after, archive = [10, 50, 100, 200, 400]):
+    problem = OmniTest(n_var=3)
+    values = []
+    for a in archive:
+        des = DES(archive_size = a)
+        v = evaluate(des, problem, iterations, stop_after)
+        values.append(v)
+
+    fig, axes = plt.subplot_mosaic("AB;CD;EE", constrained_layout=True)
+
+    for axIndex, metricIndex, metric in [('A', 1, 'GD'), ('B', 2, 'IGD'), ('C', 3, 'GD+'), ('D', 4, 'IGD+'), ('E', 5, 'HV')]:
+        ax = axes[axIndex]
+        ax.set_title(f"Porównanie względem miary {metric}")
+        for archiveIndex, value in enumerate(values):
+            ax.plot([i[0] for i in value], [i[metricIndex] for i in value], label=str(archive[archiveIndex]))
+        ax.set_xlabel("Liczba ocenionych punktów", fontsize=12)
+        ax.set_ylabel(f"Wartość miary {metric}", fontsize=12)
+        if metric != 'HV': ax.set_yscale('log')
+        ax.tick_params(axis='both', labelsize=15)
+        ax.grid()
+
+    fig.suptitle(f"Zależność między wartościami miar a maksymalną wielkością archiwum\nalgorytmu DES dla zadania OmniTest w wersji z trzema zmiennymi decyzyjnymi", fontsize='20')
+    handles, labels = ax.get_legend_handles_labels()
+    legend = axes['E'].legend(handles, labels, loc = 'lower right', title='Maksymalna liczba\npunktów w archiwum', fontsize='14')
+    plt.setp(legend.get_title(),fontsize='16')
     plt.rc('font', family='normal', weight = 'bold', size = 22)
     plt.show()
 
@@ -104,7 +255,7 @@ def lambda_test(problem, iterations, stop_after, lambdas = [12, 20]):
 
     values = []
     for l in lambdas:
-        des = DES(pop_size = l, archive_size = 300)
+        des = DES(pop_size = l, archive_size = 100)
         v = evaluate(des, problem, iterations, stop_after)
         values.append(v)
 
@@ -112,25 +263,37 @@ def lambda_test(problem, iterations, stop_after, lambdas = [12, 20]):
 
     for axIndex, metricIndex, metric in [('A', 1, 'GD'), ('B', 2, 'IGD'), ('C', 3, 'GD+'), ('D', 4, 'IGD+'), ('E', 5, 'HV')]:
         ax = axes[axIndex]
-        ax.set_title(f"Porównanie algorytmów względem metryki {metric}")
+        ax.set_title(f"Porównanie względem miary {metric}", fontsize=14)
         for lambdaIndex, value in enumerate(values):
             ax.plot([i[0] for i in value], [i[metricIndex] for i in value], label=str(lambdas[lambdaIndex]))
-        ax.set_xlabel("Liczba ocenionych punktów")
-        ax.set_ylabel(f"Wartość metryki {metric}")
+        ax.set_xlabel("Liczba ocenionych punktów", fontsize=12)
+        ax.set_ylabel(f"Wartość miary {metric}", fontsize=12)
         if metric != 'HV': ax.set_yscale('log')
+        ax.tick_params(axis='both', labelsize=15)
         ax.grid()
 
-    fig.suptitle(f"Uśrednione wartości metryk dla populacji zwracanej przez algorytmy", fontsize="16")
+    fig.suptitle(f"Zależność między wartościami miar\na wielkością populacji algorytmu DES dla zadania ZDT1", fontsize="20")
     handles, labels = ax.get_legend_handles_labels()
-    legend = fig.legend(handles, labels, loc = 'upper right', title='Liczebność populacji', fontsize="20")
-    plt.setp(legend.get_title(), fontsize='24')
+    legend = fig.legend(handles, labels, loc = 'upper right', title='Liczebność\npopulacji', fontsize="12")
+    plt.setp(legend.get_title(), fontsize='20')
     plt.rc('font', family='normal', weight = 'bold', size = 22)
     plt.show()
 
 if __name__ == "__main__":
     problem = ZDT1()
-    problem = DTLZ1()
-    problem = OmniTest(n_var=3)
-    TEST_algo(problem = problem, iterations = 2, stop_after = 7000)
-    # lambda_test(problem, 20, 6000, [10, 23, 36, 50])
-    # archive_test(problem, 10, 2000, [10, 30, 60, 100])
+    # problem = DTLZ1()
+    # problem = OmniTest(n_var=3)
+
+    # archive_time(problem=problem, iterations = 100, stop_after=600)
+    # time_test(problem = problem, iterations = 8, stop_after = 1000)
+    # TEST_algo(problem = problem, iterations = 3, stop_after = 5000)
+    # lambda_test(problem, 20, 120000, [60, 120, 240, 360])
+    # archive_test(20, 5000, [12, 36, 100, 200])
+    # nvar_test(iterations=1, stop_after=2000)
+    # crowding_test(problem, 10, 90000)
+    add_mean_test(problem, 20, 70000)
+
+    # minimize(problem, DES(visuals=True, pop_size = 30, archive_size= 100), get_termination('n_eval', 50000))
+    # minimize(problem, NSGA2(visuals=True), get_termination('n_eval', 50000))
+
+    # single_run(problem, DES(), 10, 2500)

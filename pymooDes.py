@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import time
 
 from pymoo.core.duplicate import DefaultDuplicateElimination, NoDuplicateElimination
 from pymoo.core.algorithm import Algorithm
@@ -8,6 +9,9 @@ from pymoo.core.initialization import Initialization
 from pymoo.util.misc import find_duplicates, has_feasible
 from pymoo.operators.sampling.rnd import FloatRandomSampling
 from pymoo.core.population import Population
+from pymoo.core.survival import Survival
+from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting
+from pymoo.util.randomized_argsort import randomized_argsort
 
 from pymoo.util.nds.fast_non_dominated_sort import fast_non_dominated_sort
 
@@ -25,6 +29,46 @@ _DELAY = 0.05
 # =========================================================================================================
 # Implementation
 # =========================================================================================================
+
+class RankAndCrowdingSurvival(Survival):
+    def __init__(self, nds=None) -> None:
+        super().__init__(filter_infeasible=True)
+        self.nds = nds if nds is not None else NonDominatedSorting()
+
+    def _do(self, problem, pop, *args, n_survive=None, **kwargs):
+
+        # get the objective space values and objects
+        F = pop.get("F").astype(float, copy=False)
+
+        # the final indices of surviving individuals
+        survivors = []
+
+        # do the non-dominated sorting until splitting front
+        fronts = self.nds.do(F, n_stop_if_ranked=n_survive)
+
+        for k, front in enumerate(fronts):
+
+            # calculate the crowding distance of the front
+            crowding_of_front = calc_crowding_distance(F[front, :])
+
+            # save rank and crowding in the individual class
+            for j, i in enumerate(front):
+                pop[i].set("rank", k)
+                pop[i].set("crowding", crowding_of_front[j])
+
+            # current front sorted by crowding distance if splitting
+            if len(survivors) + len(front) > n_survive:
+                I = randomized_argsort(crowding_of_front, order='descending', method='numpy')
+                I = I[:(n_survive - len(survivors))]
+
+            # otherwise take the whole front unsorted
+            else:
+                I = np.arange(len(front))
+
+            # extend the survivors by all or selected individuals
+            survivors.extend(front[I])
+
+        return pop[survivors]
 
 class ReflectionRepair(Repair):
     def __init__(self, **kwargs):
@@ -48,6 +92,8 @@ class DES(Algorithm):
                  visuals=False,
                  pop_size=None,
                  archive_size=None,
+                 ignore_crowding=False,
+                 add_mean=False,
                  **kwargs
                  ):
 
@@ -67,12 +113,17 @@ class DES(Algorithm):
         self.visuals = visuals
         self.visuals_started = False
 
+        self.prev_time = None
+        self.curr_time = None
+
         # other run specific data updated whenever solve is called - to share them in all algorithms
         self.n_gen = None
         self.N = None
         self.pop = None
 
         self.archive_size = archive_size
+        self._ignore_crowding = ignore_crowding
+        self._add_mean = add_mean
 
         self.param_archive = deque()
         self.point_archive = None
@@ -125,7 +176,7 @@ class DES(Algorithm):
         self.param_archive = deque()
         self.point_archive = None
         if not self.archive_size:
-            self.archive_size = self.pop_size
+            self.archive_size = max(200, self.pop_size)
 
         return self
 
@@ -134,32 +185,35 @@ class DES(Algorithm):
         return pop
 
     def _initialize_advance(self, infills=None, **kwargs):
+        self.prev_time = time.time_ns()/(10**6)
+        self.curr_time = time.time_ns()/(10**6)
+
         self._mean_next = get_mean(self.pop)
         self._delta = None
         self._path = None
 
-    def _survival(self) -> Population:
-        # get the objective space values and objects
-        F = self.point_archive.get("F").astype(float, copy=False)
+    # def _survival(self) -> Population:
+    #     # get the objective space values and objects
+    #     F = self.point_archive.get("F").astype(float, copy=False)
 
-        # do the non-dominated sorting until splitting front
-        fronts = fast_non_dominated_sort(F)
+    #     # do the non-dominated sorting until splitting front
+    #     fronts = fast_non_dominated_sort(F)
 
-        for k, front in enumerate(fronts):
+    #     for k, front in enumerate(fronts):
 
-            # calculate the crowding distance of the front
-            crowding_of_front = calc_crowding_distance(F[front, :])
+    #         # calculate the crowding distance of the front
+    #         crowding_of_front = calc_crowding_distance(F[front, :])
 
-            # save rank and crowding in the individual class
-            for j, i in enumerate(front):
-                self.point_archive[i].set("rank", k)
-                self.point_archive[i].set("crowding", crowding_of_front[j])
+    #         # save rank and crowding in the individual class
+    #         for j, i in enumerate(front):
+    #             self.point_archive[i].set("rank", k)
+    #             self.point_archive[i].set("crowding", crowding_of_front[j])
         
-        sort_criteria = [lambda ind: ind.get('rank'), lambda ind: ind.get('crowding')*-1]
-        I = np.lexsort([criterium(self.point_archive) for criterium in reversed(sort_criteria)])
-        self.point_archive[:] = self.point_archive[I]
+    #     sort_criteria = [lambda ind: ind.get('rank'), lambda ind: ind.get('crowding')*-1]
+    #     I = np.lexsort([criterium(self.point_archive) for criterium in reversed(sort_criteria)])
+    #     self.point_archive[:] = self.point_archive[I]
 
-        return Population.create(*self.point_archive[:self.archive_size])
+    #     return Population.create(*self.point_archive[:self.archive_size])
 
     def _selection(self) -> Population:
         # get the objective space values and objects
@@ -179,6 +233,8 @@ class DES(Algorithm):
                 self.pop[i].set("crowding", crowding_of_front[j])
         
         sort_criteria = [lambda ind: ind.get('rank'), lambda ind: ind.get('crowding')*-1]
+        if self._ignore_crowding:
+            sort_criteria = [lambda ind: ind.get('rank')]
         I = np.lexsort([criterium(self.pop) for criterium in reversed(sort_criteria)])
         self.pop[:] = self.pop[I]
 
@@ -214,11 +270,14 @@ class DES(Algorithm):
             new_position = self._mean_next + difference
 
             off.append(new_position)
+        
+        if self._add_mean:
+            off.append(self._mean_next)
 
         pop = Population.new("X", off)
         pop = self.repair.do(self.problem, pop)
 
-        if self.visuals: # and not self.n_gen % 10:
+        if self.visuals:
             if not self.visuals_started:
                 self.visuals_started = True
                 plt.rcParams["figure.figsize"] = (12,7)
@@ -228,9 +287,11 @@ class DES(Algorithm):
                 self._fig.subplots_adjust(top = 0.8, bottom = 0.1, left = 0.1, right = 0.99)
             self._draw_features()
             self._draw_values()
-            title = "Iteracja " + str(self.n_gen) + ", \n"
+            title = "Iteracja " + str(self.n_gen) + ", "
             title += "Liczebność populacji: " + str(self.pop_size) + ", \n"
-            title += "Wymiarowość: " + str(self.N) + ", \n"
+            title += "Wymiarowość przestrzeni przeszukiwania: " + str(self.problem.n_var) + ", \n"
+            title += "Wymiarowość przestrzeni kryteriów: " + str(self.problem.n_obj) + ", \n"
+            title += "Wielkość archiwum: " + str(self.archive_size)
             self._fig.suptitle(title)
 
             plt.pause(_DELAY)
@@ -241,15 +302,24 @@ class DES(Algorithm):
         if self.point_archive is None:
             self.point_archive = Population.merge(Population(), self.pop)
         else:
-            self.point_archive = Population.merge(self.point_archive, self.pop)
-            self.point_archive = self._survival()
+            # nsga2 like survival:
+            survival = RankAndCrowdingSurvival()
+            pop = Population.merge(self.pop, self.point_archive)
+            self.point_archive = survival.do(self.problem, pop, n_survive=self.archive_size, algorithm=self, **kwargs)
+            # manual survival:
+            # self.point_archive = Population.merge(self.point_archive, self.pop)
+            # self.point_archive = self._survival()
+
+        self.curr_time = time.time_ns()/(10**6)
+        t = (self.curr_time - self.prev_time)
+        self.prev_time = self.curr_time
         
         gd = GD(self.problem.pareto_front())(self.point_archive.get('F'))
         igd = IGD(self.problem.pareto_front())(self.point_archive.get('F'))
         gdp = GDPlus(self.problem.pareto_front())(self.point_archive.get('F'))
         igdp = IGDPlus(self.problem.pareto_front())(self.point_archive.get('F'))
         hv = HV([1]*self.problem.n_obj)(self.point_archive.get('F'))
-        self.history.append((self.evaluator.n_eval, gd, igd, gdp, igdp, hv))
+        self.history.append((self.evaluator.n_eval, gd, igd, gdp, igdp, hv, t))
 
         self.pop = infills
 
@@ -262,31 +332,36 @@ class DES(Algorithm):
 
         for i in self.pop:
             r = i.get('rank')
-            if not r: r = 1
-            self._ax1.scatter(i.X[0], i.X[1], c='black', s=r*20, zorder = 3)
+            if not r: r = 0
+            self._ax1.scatter(i.X[0], i.X[1], c=['purple', 'blue', 'green', 'yellow', 'orange', 'red'][r%6], s=20, zorder = 3)
 
-        self._ax1.scatter(self._mean_curr[0], self._mean_curr[1], s=50, c='yellow', zorder = 4)
-        self._ax1.scatter(self._mean_next[0], self._mean_next[1], s=20, c='red', zorder = 5)
-        self._ax1.plot([self._mean_curr[0], self._mean_next[0]], [self._mean_curr[1], self._mean_next[1]], zorder = 5)
+        # self._ax1.scatter(self._mean_curr[0], self._mean_curr[1], s=50, c='yellow', zorder = 4)
+        # self._ax1.scatter(self._mean_next[0], self._mean_next[1], s=20, c='red', zorder = 5)
+        # self._ax1.plot([self._mean_curr[0], self._mean_next[0]], [self._mean_curr[1], self._mean_next[1]], zorder = 5, c='black')
 
         axis_equal = True
         treshold = 1.1
         max1 = max2 = float('inf')
 
-        # if axis_equal:
-        #     max1 = max([abs(i.X[0]) for i in self.pop])
-        #     max1 = np.exp(np.ceil(np.log(max1)/treshold)*treshold)
-        #     max2 = max([abs(i.X[1]) for i in self.pop])
-        #     max2 = np.exp(np.ceil(np.log(max2)/treshold)*treshold)
-        #     self._ax1.axis('equal')
-        #     max1 = max2 = max(max1,max2)
-        # else:
-        #     max1 = 1.2*max([abs(i.X[0]) for i in self.pop])
-        #     max2 = 1.2*max([abs(i.X[1]) for i in self.pop])
-        #     self._ax1.axis('auto')
+        if axis_equal:
+            max1 = max([abs(i.X[0]) for i in self.pop])
+            max1 = np.exp(np.ceil(np.log(max1)/treshold)*treshold)
+            max2 = max([abs(i.X[1]) for i in self.pop])
+            max2 = np.exp(np.ceil(np.log(max2)/treshold)*treshold)
+            self._ax1.axis('equal')
+            max1 = max2 = max(max1,max2)
+        else:
+            max1 = 1.2*max([abs(i.X[0]) for i in self.pop])
+            max2 = 1.2*max([abs(i.X[1]) for i in self.pop])
+            self._ax1.axis('auto')
 
         max1 = min(max1, 1.2 * max(self.problem.xl[0], self.problem.xu[0]))
         max2 = min(max2, 1.2 * max(self.problem.xl[1], self.problem.xu[1]))
+
+        self._ax1.set_title('Przestrzeń decyzyjna', fontsize=22)
+        self._ax1.set_xlabel('$x_1$', fontsize = 22, rotation = 0, labelpad = 15)
+        self._ax1.set_ylabel('$x_2$', fontsize = 22, rotation = 0, labelpad = 15)
+        self._ax1.tick_params(labelsize=16)
 
 
     def _draw_values(self):
@@ -317,6 +392,11 @@ class DES(Algorithm):
             self._ax2.axis('auto')
         else:
             self._ax2.axis('auto')
+
+        self._ax2.set_title('Przestrzeń kryteriów', fontsize=22)
+        self._ax2.set_xlabel('$f_1$', fontsize = 22, rotation = 0, labelpad = 15)
+        self._ax2.set_ylabel('$f_2$', fontsize = 22, rotation = 0, labelpad = 15)
+        self._ax2.tick_params(labelsize=16)
 
 def get_mean(pop: Population):
     return np.mean([ind.get('X') for ind in pop], axis=0)
