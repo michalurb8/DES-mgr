@@ -77,10 +77,11 @@ class ReflectionRepair(Repair):
     def _do(self, problem, X, **kwargs):
         for Xi in X:
             for j in range(len(Xi)):
-                while Xi[j] < problem.xl[j]:
-                    Xi[j] = 2*problem.xl[j] - Xi[j]
-                while Xi[j] > problem.xu[j]:
-                    Xi[j] = 2*problem.xu[j] - Xi[j]
+                while Xi[j] < problem.xl[j] or Xi[j] > problem.xu[j]:
+                    if Xi[j] > problem.xu[j]:
+                        Xi[j] = 2*problem.xu[j] - Xi[j]
+                    else:
+                        Xi[j] = 2*problem.xl[j] - Xi[j]
         return X
 
 class DES(Algorithm):

@@ -35,7 +35,7 @@ def evaluate(algorithm: Algorithm, problem: Problem, iterations: int, stop_after
     ----------
     """
     history = []
-    termination = get_termination("n_eval", stop_after)
+    termination = get_termination("n_iter", stop_after)
     print("Starting evaluation...")
     print(f"dimensions: {problem.n_var}; iterations: {iterations}; population: {algorithm.pop_size if algorithm.pop_size else 'default'}")
     for iteration in range(iterations):
@@ -284,16 +284,16 @@ if __name__ == "__main__":
     # problem = DTLZ1()
     # problem = OmniTest(n_var=3)
 
-    # archive_time(problem=problem, iterations = 100, stop_after=600)
-    # time_test(problem = problem, iterations = 8, stop_after = 1000)
-    # TEST_algo(problem = problem, iterations = 3, stop_after = 5000)
-    # lambda_test(problem, 20, 120000, [60, 120, 240, 360])
-    # archive_test(20, 5000, [12, 36, 100, 200])
-    # nvar_test(iterations=1, stop_after=2000)
-    # crowding_test(problem, 10, 90000)
-    add_mean_test(problem, 20, 70000)
+    # archive_time(problem=problem, iterations = 100, stop_after=60)
+    # time_test(problem = problem, iterations = 8, stop_after = 100)
+    # TEST_algo(problem = problem, iterations = 3, stop_after = 500)
+    # lambda_test(problem, 20, 12000, [60, 120, 240, 360])
+    # archive_test(20, 500, [12, 36, 100, 200])
+    # nvar_test(iterations=1, stop_after=200)
+    # crowding_test(problem, 10, 9000)
+    add_mean_test(problem, 5, 5000)
 
     # minimize(problem, DES(visuals=True, pop_size = 30, archive_size= 100), get_termination('n_eval', 50000))
     # minimize(problem, NSGA2(visuals=True), get_termination('n_eval', 50000))
 
-    # single_run(problem, DES(), 10, 2500)
+    # single_run(problem, DES(), 10, 250)
